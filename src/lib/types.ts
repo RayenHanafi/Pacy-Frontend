@@ -131,14 +131,24 @@ export interface ScanResult {
   patient: ScannedPatient;
   station_type: "doctor" | "pharmacy";
   scanned_at: IsoDateTime;
+  /** Dispensable right now. Pharmacy only. */
   prescriptions?: Prescription[];
+  /**
+   * Pharmacy only: created in the last 30 days and NOT dispensable —
+   * exhausted, revoked or expired. The exact complement of `prescriptions`,
+   * so a prescription can never be in both lists and never falls between them.
+   * Each row carries its full `events[]`, which is what lets a refusal cite
+   * the fill that actually spent it.
+   */
+  recently_completed?: Prescription[];
 }
 
 export interface DrugDetails {
   drug: string;
   dosage: string;
   instructions: string;
-  diagnosis: string;
+  /** Optional: the doctor's own listing omits it. Never render it to a pharmacy. */
+  diagnosis?: string;
 }
 
 /**
@@ -153,9 +163,15 @@ export type PrescriptionStatus =
 
 export interface PrescriptionEvent {
   id: string;
-  tx_hash: string;
-  actor_role: Role;
-  event_type: "mint" | "burn";
+  /** Null for an action with no on-chain counterpart — e.g. revoking past expiry. */
+  tx_hash: string | null;
+  actor_role: Role | null;
+  /**
+   * "revoke" is distinct from "burn": a burn is one fill spent by a pharmacy,
+   * a revoke is the doctor voiding every remaining fill at once. Don't collapse
+   * them in the UI — the patient needs to see which one happened.
+   */
+  event_type: "mint" | "burn" | "revoke";
   created_at: IsoDateTime;
 }
 
@@ -173,14 +189,16 @@ export interface Prescription {
   max_uses: number;
   uses_remaining: number;
   expires_at: Expiry;
-  policy_id: string;
-  asset_name: string;
-  mint_tx_hash: string;
+  // Nullable: a row can exist in the database before its mint settles, so
+  // never assume the on-chain identity is present. Guard before linking.
+  policy_id: string | null;
+  asset_name: string | null;
+  mint_tx_hash: string | null;
   status: PrescriptionStatus;
   created_at: IsoDateTime;
-  /** Present on GET /patient/prescriptions — the mint/burn audit trail. */
+  /** The mint/burn/revoke audit trail. Absent on the pharmacy dispensable list. */
   events?: PrescriptionEvent[];
-  /** Present on POST /prescriptions. */
+  /** Present on POST /prescriptions and GET /doctor/prescriptions. */
   patient?: ScannedPatient;
   /** Present on dispense/revoke responses. Null when revoking an expired one. */
   burn_tx_hash?: string | null;
@@ -188,6 +206,16 @@ export interface Prescription {
 
 /** GET /patient/prescriptions — note the wrapper object. */
 export interface PatientPrescriptionsResponse {
+  prescriptions: Prescription[];
+}
+
+/**
+ * GET /doctor/prescriptions — everything this doctor has written, newest first,
+ * each with `patient` and its full `events[]`. Role-guarded but *not*
+ * verification-guarded: a doctor whose HPCSA registration lapsed can still read
+ * back and revoke what they wrote.
+ */
+export interface DoctorPrescriptionsResponse {
   prescriptions: Prescription[];
 }
 

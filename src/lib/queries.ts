@@ -2,9 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, CHAIN_TIMEOUT_MS } from "./api";
+import { getSupabaseClient } from "./supabase";
 import type {
   CreatePrescriptionBody,
+  DoctorPrescriptionsResponse,
   HealthResponse,
   Me,
   PatientPrescriptionsResponse,
@@ -15,24 +17,55 @@ import type {
 
 /** Query keys in one place so invalidation can't drift from fetching. */
 export const queryKeys = {
+  session: ["session"] as const,
   me: ["me"] as const,
   health: ["health"] as const,
   qrToken: ["patient", "qr-token"] as const,
   currentScan: ["stations", "current-scan"] as const,
   patientPrescriptions: ["patient", "prescriptions"] as const,
+  doctorPrescriptions: ["doctor", "prescriptions"] as const,
 };
+
+/**
+ * Is the browser holding a Supabase session at all?
+ *
+ * This is *not* the role authority — it answers only "is there a token to
+ * send". Being signed out is an ordinary state, not an error, so it must not
+ * reach the backend as a 401: that would be indistinguishable from a session
+ * that expired mid-use, and would sign the user out of the login page they're
+ * already sitting on.
+ *
+ * Resolves to `null` when signed out, never throws.
+ */
+export function useSession() {
+  return useQuery({
+    queryKey: queryKeys.session,
+    queryFn: async () => {
+      const { data } = await getSupabaseClient().auth.getSession();
+      return data.session ? { userId: data.session.user.id } : null;
+    },
+    retry: false,
+  });
+}
 
 /**
  * The role authority. Everything role-gated waits on this — never on JWT
  * claims or anything cached client-side (CLAUDE.md rule 5).
+ *
+ * Stays pending while we don't yet know whether a session exists, and never
+ * runs at all without one. Callers that need to react to "signed out" should
+ * watch `useSession()`.
  */
 export function useMe() {
+  const session = useSession();
+
   return useQuery({
     queryKey: queryKeys.me,
     queryFn: () => api<Me>("/me"),
     // Identity doesn't change mid-session; don't refetch it on every focus.
     staleTime: 5 * 60 * 1000,
     retry: false,
+    enabled: Boolean(session.data),
   });
 }
 
@@ -102,15 +135,36 @@ export function usePatientPrescriptions() {
   });
 }
 
-/** Doctor: mint. */
+/** Everything this doctor has written, newest first, with patient and events. */
+export function useDoctorPrescriptions() {
+  return useQuery({
+    queryKey: queryKeys.doctorPrescriptions,
+    queryFn: async () =>
+      (await api<DoctorPrescriptionsResponse>("/doctor/prescriptions"))
+        ?.prescriptions ?? [],
+  });
+}
+
+/**
+ * Doctor: mint. A real preprod confirmation, 20–60s — no optimistic update is
+ * possible here because the tx hash does not exist until the response lands.
+ */
 export function useCreatePrescription() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: CreatePrescriptionBody) =>
-      api<Prescription>("/prescriptions", { method: "POST", json: body }),
+      api<Prescription>("/prescriptions", {
+        method: "POST",
+        json: body,
+        timeoutMs: CHAIN_TIMEOUT_MS,
+      }),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.patientPrescriptions,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.doctorPrescriptions,
       });
     },
   });
@@ -119,7 +173,7 @@ export function useCreatePrescription() {
 /**
  * Pharmacy: burn one fill.
  *
- * `retry: false` is load-bearing, not a default. A dispense takes 12–16s
+ * `retry: false` is load-bearing, not a default. A dispense takes 20–60s
  * against the real chain; an automatic retry on a slow response would burn a
  * second fill the patient never received.
  */
@@ -129,6 +183,7 @@ export function useDispense() {
     mutationFn: (prescriptionId: string) =>
       api<Prescription>(`/prescriptions/${prescriptionId}/dispense`, {
         method: "POST",
+        timeoutMs: CHAIN_TIMEOUT_MS,
       }),
     retry: false,
     onSuccess: () => {
@@ -147,11 +202,15 @@ export function useRevoke() {
     mutationFn: (prescriptionId: string) =>
       api<Prescription>(`/prescriptions/${prescriptionId}/revoke`, {
         method: "POST",
+        timeoutMs: CHAIN_TIMEOUT_MS,
       }),
     retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.patientPrescriptions,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.doctorPrescriptions,
       });
     },
   });

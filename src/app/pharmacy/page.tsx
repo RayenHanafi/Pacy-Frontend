@@ -17,7 +17,11 @@ export default function PharmacyHome() {
   return (
     <div className="space-y-4">
       <PatientContextBar scan={scan} onClear={() => setScan(null)} />
-      <DispenseList prescriptions={scan.prescriptions ?? []} />
+      <DispenseList
+        prescriptions={scan.prescriptions ?? []}
+        recentlyCompleted={scan.recently_completed ?? []}
+        patientName={scan.patient.full_name}
+      />
     </div>
   );
 }

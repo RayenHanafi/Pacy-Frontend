@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
-import { TxHash } from "@/components/shared/tx-hash";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -201,30 +200,22 @@ export function PrescribeForm({
               />
             ) : null}
 
-            {mutation.isSuccess && mutation.data ? (
-              <div className="rounded-lg border border-success/40 bg-success-surface p-4">
-                <p className="font-medium text-success-text">
-                  Minted on-chain
-                </p>
-                <p className="text-sm text-foreground">
-                  {mutation.data.max_uses} fill
-                  {mutation.data.max_uses === 1 ? "" : "s"} authorised.
-                </p>
-                <div className="pt-2">
-                  <TxHash hash={mutation.data.mint_tx_hash} label="Mint tx" />
-                </div>
-              </div>
-            ) : null}
-
             <Button
               type="submit"
               className="w-full"
               disabled={mutation.isPending}
             >
               {mutation.isPending
-                ? "Minting on-chain…"
+                ? "Writing to Cardano…"
                 : "Prescribe & mint token"}
             </Button>
+
+            {mutation.isPending ? (
+              <p className="text-center text-sm text-text-muted">
+                Submitting a real transaction to preprod. Don&rsquo;t close this
+                tab.
+              </p>
+            ) : null}
           </form>
         </Form>
       </CardContent>

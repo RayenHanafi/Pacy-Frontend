@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMe } from "@/lib/queries";
+import { useMe, useSession } from "@/lib/queries";
 import { roleHome } from "@/lib/roles";
 
 /**
@@ -11,20 +11,23 @@ import { roleHome } from "@/lib/roles";
  */
 export default function Home() {
   const router = useRouter();
-  const { data: me, isPending, isError } = useMe();
+  const session = useSession();
+  const { data: me, isError } = useMe();
+
+  // Signed out is an ordinary state, not a failure — go to login without
+  // asking the backend a question it can only answer with a 401.
+  const signedOut = session.isSuccess && session.data === null;
 
   useEffect(() => {
-    if (isError) router.replace("/login");
+    if (signedOut || isError) router.replace("/login");
     else if (me) router.replace(roleHome[me.role]);
-  }, [me, isError, router]);
+  }, [me, isError, signedOut, router]);
 
   return (
     <main className="mx-auto w-full max-w-sm space-y-4 px-6 py-24">
       <Skeleton className="h-8 w-32" />
       <Skeleton className="h-4 w-48" />
-      <span className="sr-only">
-        {isPending ? "Loading your account…" : "Redirecting…"}
-      </span>
+      <span className="sr-only">Loading your account…</span>
     </main>
   );
 }

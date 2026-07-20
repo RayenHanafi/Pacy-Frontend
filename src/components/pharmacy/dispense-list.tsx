@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
+import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
 import { formatDate, TxHash } from "@/components/shared/tx-hash";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,49 @@ import {
 import { useDispense } from "@/lib/queries";
 import type { Prescription } from "@/lib/types";
 
-function PrescriptionRow({ prescription }: { prescription: Prescription }) {
+/**
+ * Which list a row came from — NOT a styling flag.
+ *
+ * "dispensable": the backend says this can be filled right now. Guard it
+ *   properly — disabled at zero fills and for the whole in-flight request, so a
+ *   double-click can't burn a fill the patient never received.
+ *
+ * "completed": already exhausted, revoked or expired. The button stays LIVE on
+ *   purpose. Clicking it makes a real request that the server genuinely refuses
+ *   with a 409; nothing is staged, and the refusal is the point. Do not "fix"
+ *   the live button on a zero-fill row — that is this row's whole reason to
+ *   exist. The double-click guard below still applies; only the zero-fill
+ *   disable is lifted.
+ */
+type RowVariant = "dispensable" | "completed";
+
+function PrescriptionRow({
+  prescription,
+  patientName,
+  variant,
+}: {
+  prescription: Prescription;
+  patientName: string;
+  variant: RowVariant;
+}) {
   const dispense = useDispense();
   const [justDispensed, setJustDispensed] = useState<Prescription | null>(null);
+  // When we saw the burn submitted — the explorer needs ~20s before it can
+  // resolve the hash, so the link stays inert until then.
+  const [burnedAt, setBurnedAt] = useState<number | undefined>(undefined);
 
   const current = justDispensed ?? prescription;
-  const exhausted = current.uses_remaining <= 0;
+  const completed = variant === "completed";
+  const outOfFills = current.uses_remaining <= 0;
 
   return (
-    <div className="rounded-lg border border-border-subtle p-4">
+    <div
+      className={`rounded-lg border p-4 ${
+        completed
+          ? "border-border-subtle bg-surface-sunken"
+          : "border-border-subtle"
+      }`}
+    >
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-text-strong">
@@ -48,19 +83,40 @@ function PrescriptionRow({ prescription }: { prescription: Prescription }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {completed ? <StatusPill status={current.status} /> : null}
         <Badge variant="secondary">{formatDate(current.expires_at)}</Badge>
-        {exhausted ? <Badge variant="outline">Fully dispensed</Badge> : null}
-        <TxHash hash={current.mint_tx_hash} label="Mint" />
+        {current.mint_tx_hash ? (
+          <TxHash
+            hash={current.mint_tx_hash}
+            label="Mint"
+            submittedAt={current.created_at}
+          />
+        ) : null}
         {current.burn_tx_hash ? (
-          <TxHash hash={current.burn_tx_hash} label="Burn" />
+          <TxHash
+            hash={current.burn_tx_hash}
+            label="Burn"
+            submittedAt={burnedAt}
+          />
         ) : null}
       </div>
+
+      {/* The receipt. On a refused row this is the answer to "how do you know
+          it was already filled?" — a real tx, timestamped, independently
+          verifiable on the explorer. */}
+      {completed && current.events?.length ? (
+        <div className="mt-3 border-t border-border-subtle pt-3">
+          <EventTrail events={current.events} />
+        </div>
+      ) : null}
 
       {dispense.isError ? (
         <div className="mt-3">
           <BlockedPanel
             error={dispense.error}
             onRetry={() => dispense.reset()}
+            patientName={patientName}
+            emphasis={completed}
           />
         </div>
       ) : null}
@@ -72,7 +128,11 @@ function PrescriptionRow({ prescription }: { prescription: Prescription }) {
           </p>
           {justDispensed.burn_tx_hash ? (
             <div className="pt-1">
-              <TxHash hash={justDispensed.burn_tx_hash} label="Burn tx" />
+              <TxHash
+                hash={justDispensed.burn_tx_hash}
+                label="Burn tx"
+                submittedAt={burnedAt}
+              />
             </div>
           ) : null}
         </div>
@@ -80,20 +140,29 @@ function PrescriptionRow({ prescription }: { prescription: Prescription }) {
 
       <Button
         className="mt-3 w-full sm:w-auto"
-        // Disabled for the whole request: a burn takes 12-16s against the real
-        // chain, and a double-submit would consume a fill the patient never got.
-        disabled={dispense.isPending || exhausted}
+        variant={completed ? "outline" : "default"}
+        // A burn takes 12-16s (measured), most of it waiting on the previous
+        // chain write to settle, so the in-flight guard matters on every row.
+        // The zero-fill disable applies only to dispensable rows — see the
+        // RowVariant comment above before changing this.
+        disabled={dispense.isPending || (!completed && outOfFills)}
         onClick={() =>
           dispense.mutate(current.id, {
-            onSuccess: (result) => result && setJustDispensed(result),
+            onSuccess: (result) => {
+              if (!result) return;
+              setBurnedAt(Date.now());
+              setJustDispensed(result);
+            },
           })
         }
       >
         {dispense.isPending
-          ? "Burning on-chain… (up to 20s)"
-          : exhausted
-            ? "No fills remaining"
-            : "Dispense one fill"}
+          ? "Writing to Cardano… (~15s)"
+          : completed
+            ? "Attempt dispense"
+            : outOfFills
+              ? "No fills remaining"
+              : "Dispense one fill"}
       </Button>
     </div>
   );
@@ -101,32 +170,68 @@ function PrescriptionRow({ prescription }: { prescription: Prescription }) {
 
 export function DispenseList({
   prescriptions,
+  recentlyCompleted,
+  patientName,
 }: {
   prescriptions: Prescription[];
+  recentlyCompleted: Prescription[];
+  patientName: string;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-display text-text-strong">
-          Dispensable prescriptions
-        </CardTitle>
-        <CardDescription>
-          Expired, exhausted and revoked prescriptions are filtered out by the
-          backend — anything listed here is valid right now.
-        </CardDescription>
-      </CardHeader>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-text-strong">
+            Dispensable prescriptions
+          </CardTitle>
+          <CardDescription>
+            Anything listed here is valid right now.
+          </CardDescription>
+        </CardHeader>
 
-      <CardContent className="space-y-3">
-        {prescriptions.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border-default bg-surface-sunken px-4 py-12 text-center text-sm text-text-muted">
-            Nothing to dispense for this patient.
-          </div>
-        ) : (
-          prescriptions.map((p) => (
-            <PrescriptionRow key={p.id} prescription={p} />
-          ))
-        )}
-      </CardContent>
-    </Card>
+        <CardContent className="space-y-3">
+          {prescriptions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border-default bg-surface-sunken px-4 py-12 text-center text-sm text-text-muted">
+              Nothing to dispense for this patient.
+            </div>
+          ) : (
+            prescriptions.map((p) => (
+              <PrescriptionRow
+                key={p.id}
+                prescription={p}
+                patientName={patientName}
+                variant="dispensable"
+              />
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {recentlyCompleted.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-text-strong">
+              Recently completed
+            </CardTitle>
+            <CardDescription>
+              Filled, revoked or expired in the last 30 days. Shown so you can
+              see a script was already dealt with — attempting one anyway is
+              refused by the server, and the ledger would refuse it underneath.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-3">
+            {recentlyCompleted.map((p) => (
+              <PrescriptionRow
+                key={p.id}
+                prescription={p}
+                patientName={patientName}
+                variant="completed"
+              />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
   );
 }

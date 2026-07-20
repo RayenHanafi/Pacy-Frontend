@@ -49,9 +49,19 @@ const BLOCKED_COPY: Partial<
 export function BlockedPanel({
   error,
   onRetry,
+  patientName,
+  emphasis = false,
 }: {
   error: unknown;
   onRetry?: () => void;
+  /** Whose prescription was refused — shown so the refusal is unambiguous. */
+  patientName?: string;
+  /**
+   * Turn the refusal into the loudest thing on screen. Used where a refusal is
+   * the expected, correct outcome rather than a mishap — the pharmacy trying
+   * to re-dispense a spent prescription.
+   */
+  emphasis?: boolean;
 }) {
   const code = error instanceof ApiError ? error.code : undefined;
   const copy = code ? BLOCKED_COPY[code] : undefined;
@@ -60,19 +70,60 @@ export function BlockedPanel({
   const body =
     copy?.body ??
     (error instanceof Error ? error.message : "Something went wrong.");
+  // The server's own words, kept distinct from our pharmacist-facing copy:
+  // this is the part that proves the refusal came from the backend and not
+  // from a client-side guard we wrote.
+  const serverMessage =
+    error instanceof ApiError && error.message !== body ? error.message : null;
 
   return (
-    <div className="rounded-lg border border-danger/40 bg-danger-surface p-4">
+    <div
+      className={
+        emphasis
+          ? "rounded-lg border-2 border-danger bg-danger-surface p-5"
+          : "rounded-lg border border-danger/40 bg-danger-surface p-4"
+      }
+    >
       <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className="mt-1 size-2 shrink-0 rounded-full bg-danger"
+          className={
+            emphasis
+              ? "mt-2 size-3 shrink-0 rounded-full bg-danger"
+              : "mt-1 size-2 shrink-0 rounded-full bg-danger"
+          }
         />
         <div className="space-y-1">
-          <p className="font-medium text-danger-text">{title}</p>
+          <p
+            className={
+              emphasis
+                ? "font-display text-xl font-semibold text-danger-text"
+                : "font-medium text-danger-text"
+            }
+          >
+            {title}
+          </p>
+          {patientName ? (
+            <p className="text-sm font-medium text-foreground">
+              {patientName}
+            </p>
+          ) : null}
           <p className="text-sm text-foreground">{body}</p>
+          {serverMessage ? (
+            <p className="pt-1 text-sm italic text-text-muted">
+              Server: &ldquo;{serverMessage}&rdquo;
+            </p>
+          ) : null}
           {code ? (
-            <p className="pt-1 font-mono text-xs text-text-muted">{code}</p>
+            <p
+              className={
+                emphasis
+                  ? "pt-1 font-mono text-sm font-medium text-danger-text"
+                  : "pt-1 font-mono text-xs text-text-muted"
+              }
+            >
+              {code}
+            </p>
           ) : null}
         </div>
       </div>

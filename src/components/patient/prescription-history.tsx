@@ -1,6 +1,7 @@
 "use client";
 
-import { formatDate, TxHash } from "@/components/shared/tx-hash";
+import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
+import { formatDate } from "@/components/shared/tx-hash";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,38 +13,9 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePatientPrescriptions } from "@/lib/queries";
-import type { Prescription, PrescriptionStatus } from "@/lib/types";
-
-/**
- * Status styling. Revoked prescriptions stay visible on purpose — the audit
- * trail is the point, so hiding them would defeat it.
- */
-const STATUS: Record<PrescriptionStatus, { label: string; className: string }> =
-  {
-    active: {
-      label: "Active",
-      className: "bg-success-surface text-success-text",
-    },
-    fully_dispensed: {
-      label: "Fully dispensed",
-      className: "bg-surface-sunken text-text-muted",
-    },
-    revoked: {
-      label: "Revoked",
-      className: "bg-danger-surface text-danger-text",
-    },
-    expired: {
-      label: "Expired",
-      className: "bg-warning-surface text-warning-text",
-    },
-  };
+import type { Prescription } from "@/lib/types";
 
 function PrescriptionCard({ prescription }: { prescription: Prescription }) {
-  const status = STATUS[prescription.status] ?? {
-    label: prescription.status,
-    className: "bg-surface-sunken text-text-muted",
-  };
-
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -55,11 +27,7 @@ function PrescriptionCard({ prescription }: { prescription: Prescription }) {
             {prescription.drug_details.dosage}
           </p>
         </div>
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
-        >
-          {status.label}
-        </span>
+        <StatusPill status={prescription.status} />
       </div>
 
       <p className="mt-2 text-sm text-foreground">
@@ -74,16 +42,9 @@ function PrescriptionCard({ prescription }: { prescription: Prescription }) {
       </div>
 
       {prescription.events?.length ? (
-        <ul className="mt-3 space-y-1 border-t border-border-subtle pt-3">
-          {prescription.events.map((event) => (
-            <li key={event.id} className="flex flex-wrap items-center gap-2">
-              <span className="text-xs capitalize text-text-muted">
-                {event.event_type === "mint" ? "Issued" : "Dispensed"}
-              </span>
-              <TxHash hash={event.tx_hash} label="" />
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 border-t border-border-subtle pt-3">
+          <EventTrail events={prescription.events} />
+        </div>
       ) : null}
     </div>
   );

@@ -86,7 +86,16 @@ interface ApiOptions extends Omit<RequestInit, "body"> {
   json?: unknown;
   /** Skip the Authorization header (only /health needs this). */
   anonymous?: boolean;
+  /**
+   * Abort after this many ms. Browsers impose no fetch timeout of their own,
+   * so this exists to bound a genuinely hung request — never set it near the
+   * expected duration of a mint or burn, which the backend puts at 20–60s.
+   */
+  timeoutMs?: number;
 }
+
+/** Long enough for a real preprod confirmation, per the backend's guidance. */
+export const CHAIN_TIMEOUT_MS = 120_000;
 
 /**
  * Returns the parsed JSON body, or `undefined` for 204 — which
@@ -94,10 +103,11 @@ interface ApiOptions extends Omit<RequestInit, "body"> {
  */
 export async function api<T>(
   path: string,
-  { json, anonymous, headers, ...init }: ApiOptions = {},
+  { json, anonymous, headers, timeoutMs, ...init }: ApiOptions = {},
 ): Promise<T | undefined> {
   const res = await fetch(`${env.backendUrl}${path}`, {
     ...init,
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     headers: {
       ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(anonymous ? {} : await authHeader()),

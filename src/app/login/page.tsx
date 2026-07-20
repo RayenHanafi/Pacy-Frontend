@@ -39,15 +39,24 @@ export default function LoginPage() {
     setPending(true);
 
     try {
-      const { error: authError } = await getSupabaseClient().auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { data, error: authError } =
+        await getSupabaseClient().auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
       if (authError) {
         setError(authError.message);
         return;
       }
+
+      // Seed the session cache before navigating. Queries gated on a session
+      // read this; leaving it as the stale "signed out" value would park the
+      // next screen on a skeleton until it happened to refetch.
+      queryClient.setQueryData(
+        queryKeys.session,
+        data.session ? { userId: data.session.user.id } : null,
+      );
 
       // Role comes from the backend, never from the JWT we just received.
       // Fetch it before routing so we land on the right view the first time

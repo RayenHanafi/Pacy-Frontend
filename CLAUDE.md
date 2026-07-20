@@ -74,7 +74,31 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
   never dies on screen.
 - **Revoke**: doctor only; burns all remaining uses. Revoked prescriptions
   **do** appear in the patient's history, marked revoked, for audit
-  transparency.
+  transparency. Revoking an already-expired prescription returns
+  `burn_tx_hash: null` — and only then. The policy's time-lock forbids any burn
+  past expiry, so that revoke is database-only. Say so; never render a blank
+  where a tx link goes.
+- **Chain writes: mint ~3s, burn 12–16s** (measured, not estimated). The
+  backend resolves the HTTP call as soon as the node *accepts* the submission;
+  a burn is slow mostly because it waits on the *previous* write to settle.
+  Never optimistically update — the tx hash doesn't exist until the response
+  lands. Disable the control for the whole request and never auto-retry
+  (`retry: false` on all three): a retried burn spends a fill the patient never
+  received. `CHAIN_TIMEOUT_MS` (120s) in `lib/api.ts` bounds a genuinely hung
+  socket — browsers impose no fetch timeout of their own.
+- **A returned tx hash is submitted, not confirmed.** Cardanoscan 404s it for
+  ~20s. Never render a fresh hash as a live link: pass `submittedAt` to
+  `TxHash` and it holds the link inert, labelled "pending confirmation", for
+  25s. Omit `submittedAt` only for historical hashes. A judge clicking through
+  to a 404 mid-demo is a credibility hit.
+- **Prescription events** are `mint | burn | revoke` — three, not two. A burn is
+  one fill spent by a pharmacy; a revoke is the doctor voiding all remaining
+  fills. Don't collapse them in the UI.
+- **No doctor-side prescription list endpoint exists *yet*.** `GET
+  /patient/prescriptions` is patient-only and a doctor's scan response omits
+  `prescriptions`, so today a doctor can only revoke the prescription they just
+  minted, from the mint confirmation screen. `GET /doctor/prescriptions` is
+  being built — see "Not built yet" below.
 - **Backend base URL**: `http://localhost:8080` for dev; Railway URL later.
   CORS is already open (`origin: true, credentials: true`) — no CORS work here.
 - **Error envelope**: `{ error: { code, message, details? } }` on every endpoint.
@@ -83,10 +107,26 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
 - **Roles**: pre-seeded server-side. No signup, no role picker, no verification
   UI — doctors and pharmacies can't self-verify (regulator constraint).
 
+- **The live dispense button on a spent row is deliberate.** Rows in the
+  pharmacy's `recently_completed` list keep their button enabled so a click
+  makes a real request the server genuinely refuses with a 409. Branch on
+  *which list the row came from*, never on `uses_remaining` — see the
+  `RowVariant` comment in `pharmacy/dispense-list.tsx` before "fixing" it. The
+  in-flight double-click guard still applies to every row.
+
+## Backend handoffs are files, not messages
+
+Read `../Pacy-Backend/FRONTEND_HANDOFF.md`. Pasted handoffs arrived truncated
+three times; the corruption is in the relay, so the file is the source of truth.
+
 ## Open questions
 
-- **Response shapes** for `/me` (incl. which station the caller owns),
-  `/patient/qr-token`, `/patient/prescriptions`, and the shared patient-context
-  shape returned by the two scan paths. Confirm against the live backend in
-  Phase 1 and write them into `lib/types.ts` before building screens on them.
-- **Seeded test credentials** — arriving at the end of backend Phase 1.
+- **Production backend URL** — Railway deploy in progress; arrives in a
+  follow-up. Read it from `NEXT_PUBLIC_BACKEND_URL`; never hardcode localhost.
+- **`/health` reports `configured.supabase_auth: false`** while every other flag
+  is true, despite auth working. Cosmetic so far.
+
+All response shapes (`/me`, `/patient/qr-token`, `/patient/prescriptions`, both
+scan paths, mint / dispense / revoke) are verified live and typed in
+`lib/types.ts`. Seeded logins: `doctor@` / `pharmacy@` / `patient@pacy.test`,
+all `PacyDemo123!`.
