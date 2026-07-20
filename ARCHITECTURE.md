@@ -52,36 +52,43 @@ gating is UX, not security.
 ```
 src/
   app/
-    layout.tsx                 # root: providers, PWA meta
-    page.tsx                   # entry → redirects by role
+    layout.tsx                 # root: fonts, providers, testnet footer
+    page.tsx                   # entry → redirects to the role's home
+    providers.tsx              # QueryClient + central 401 → sign-out
     login/page.tsx
-    (patient)/
-      layout.tsx               # requireRole('patient'); mobile shell
+    patient/
+      layout.tsx               # RequireRole('patient'); mobile shell
       page.tsx                 # rotating QR
       prescriptions/page.tsx   # history + events
-    (doctor)/
-      layout.tsx               # requireRole('doctor'); desktop shell
-      page.tsx                 # patient scan/lookup + prescribe form
-    (pharmacy)/
-      layout.tsx               # requireRole('pharmacy'); desktop shell
+    doctor/
+      layout.tsx               # RequireRole('doctor'); desktop shell
+      page.tsx                 # patient scan + prescribe form
+    pharmacy/
+      layout.tsx               # RequireRole('pharmacy'); desktop shell
       page.tsx                 # scan + active prescriptions + dispense
   components/
     ui/                        # shadcn output — do not hand-edit
+    auth/require-role.tsx
+    shared/                    # AppHeader, TestnetFooter, TxHashBadge, ScanPanel
     patient/  doctor/  pharmacy/
-    shared/                    # RoleGate, TxHashBadge, EmptyState, ScanPanel
   lib/
-    supabase.ts                # browser client (singleton)
+    env.ts                     # env chokepoint; throws on missing vars
+    supabase.ts                # browser client (singleton), auth only
     api.ts                     # typed fetch wrapper, injects Bearer token
-    queries.ts                 # TanStack Query hooks, one per endpoint
-    types.ts                   # API response types (mirror backend contract)
-  hooks/
-    use-session.ts  use-role.ts  use-qr-token.ts
+    queries.ts                 # TanStack Query hooks + query keys
+    roles.ts                   # role → home route, role → label
+    types.ts                   # API types (mirror backend contract)
 public/
   manifest.json  icons/
 ```
 
-Route groups (`(patient)`, `(doctor)`, `(pharmacy)`) keep each role's layout,
-shell, and gating isolated without leaking into the URL.
+**Real path segments, not route groups.** Route groups (`(patient)`) don't add a
+URL segment, so all three role homes would have collided on `/`. Segments also
+make the demo legible — the URL says which view is on screen.
+
+`RequireRole` gates on `GET /me` and redirects mismatches to their own home. This
+is **UX, not security**: the backend enforces role on every endpoint, and the
+gate only stops someone landing on a screen that would 403 anyway.
 
 ---
 
@@ -106,8 +113,44 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 ```
 
-A 401 means the Supabase session expired → sign out and bounce to `/login`.
-Handle it centrally here, not in every component.
+### Error envelope
+
+Every endpoint fails with the same shape:
+
+```jsonc
+{ "error": { "code": "PRESCRIPTION_EXPIRED", "message": "…", "details": {} } }
+```
+
+`lib/api.ts` normalizes this into an `ApiError` carrying `code`, `status`, and
+`details`. **Branch on `code`, never on message text** — messages are copy and
+will change.
+
+| Code | Status | Frontend behaviour |
+| --- | --- | --- |
+| `UNAUTHORIZED` | 401 | sign out, bounce to `/login` |
+| `INVALID_STATION_KEY` | 401 | unreachable from a browser (IoT only) |
+| `FORBIDDEN` | 403 | wrong role; show "not available for your role" |
+| `NOT_FOUND` | 404 | empty state |
+| `VALIDATION_ERROR` | 400 | surface on the offending form field |
+| `INVALID_QR_TOKEN` | 422 | token aged out — refetch the token, retry once |
+| `PRESCRIPTION_EXPIRED` | 409 | **blocked state** |
+| `PRESCRIPTION_EXHAUSTED` | 409 | **blocked state** |
+| `PRESCRIPTION_REVOKED` | 409 | **blocked state** |
+| `PRESCRIPTION_NOT_ACTIVE` | 409 | **blocked state** |
+| `CHAIN_ERROR` | 502 | retryable; say the chain rejected it, not "something broke" |
+| `INTERNAL_ERROR` | 500 | generic retry |
+
+The four 409s are **the demo moment** — they're the whole product thesis, that
+the chain refuses a bad dispense. Render each as an explicit blocked panel
+naming the reason. Never a generic toast. `ApiError.isBlockedDispense` groups
+them.
+
+Gate auto-logout on `code === "UNAUTHORIZED"`, never on `status === 401`.
+`UNAUTHORIZED` is the only 401 a browser can receive; `INVALID_STATION_KEY` goes
+only to a Pi sending `X-Station-Key`, a header no browser sends.
+
+`api()` resolves to `undefined` on 204, which `GET /stations/current-scan` uses
+for "no patient scanned yet."
 
 ### Endpoints consumed
 
@@ -117,23 +160,51 @@ Handle it centrally here, not in every component.
 | GET | `/me` | any | source of truth for role |
 | GET | `/patient/qr-token` | patient | poll every 30s, render as QR |
 | GET | `/patient/prescriptions` | patient | history incl. mint/burn events |
-| POST | `/prescriptions` | doctor | `{ patient_id, drug_details, max_uses, expiry }` → mints |
+| POST | `/prescriptions` | doctor | body below → mints |
 | POST | `/prescriptions/:id/dispense` | pharmacy | burns 1 |
-| POST | `/prescriptions/:id/revoke` | doctor (?) | **TODO: confirm role + semantics** |
+| POST | `/prescriptions/:id/revoke` | doctor | burns **all** remaining |
+| GET | `/stations/current-scan` | doctor/pharmacy | poll ~1.5s; `204` = no scan yet |
+| POST | `/scan` | doctor/pharmacy | camera fallback; returns patient context inline |
 | POST | `/stations/scan` | IoT only | web app does **not** call this |
+
+```jsonc
+// POST /prescriptions
+{
+  "patient_id": "<uuid>",
+  "drug_details": { "drug": "", "dosage": "", "instructions": "", "diagnosis": "" },
+  "max_uses": 1,                       // int >= 1
+  "expires_at": "2026-08-01T00:00:00Z" // ISO 8601 UTC, or null for no expiry
+}
+```
 
 > Response shapes are **unconfirmed**. Phase 1 starts by hitting the live backend
 > and writing the real types into `lib/types.ts`. Do not invent field names and
 > build three screens on top of them.
 
+### Scan flow
+
+The IoT station and the camera fallback return the **same patient-context
+shape**, so the doctor and pharmacy views consume one type either way:
+
+```
+IoT:    Pi ──POST /stations/scan──► backend stores "current scan" for that station
+        browser ──GET /stations/current-scan (poll 1.5s)──► patient context | 204
+
+Camera: browser decodes QR ──POST /scan (operator JWT)──► patient context (inline)
+```
+
+`GET /me` tells the browser which station it owns. No Supabase Realtime — polling
+only, by design. Poll only while the "waiting for patient" screen is focused.
+
 ---
 
 ## Polling strategy
 
-- QR token: `refetchInterval: 30_000`, `refetchOnWindowFocus: true`. Show a
-  countdown ring so the patient understands the code rotates.
-- Pharmacy/doctor scan inbox (if polling is the answer to the open scan question):
-  2–3s interval while the view is focused, stopped otherwise.
+- QR token: server-side expiry is a hard 30s (backend 422s an expired token), so
+  `refetchInterval: 25_000` — refresh before it dies, and show a hard countdown
+  ring so the patient understands the code rotates.
+- Pharmacy/doctor scan inbox: `GET /stations/current-scan` at 1.5s while the
+  "waiting for patient" screen is focused, stopped otherwise.
 - Everything else: fetch on mount + invalidate after mutations.
 
 ---
@@ -143,15 +214,58 @@ Handle it centrally here, not in every component.
 `.env.local` (never committed; `.env.example` is committed):
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=        # TODO: full URL was truncated in the brief
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_BACKEND_URL=         # Railway backend base URL
+NEXT_PUBLIC_SUPABASE_URL=https://rujemygoawvemvwewplq.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=   # anon/public key from the Supabase dashboard
+NEXT_PUBLIC_BACKEND_URL=         # Railway backend base URL, no trailing slash
 ```
+
+Read them through `lib/env.ts`, never `process.env` directly — a missing variable
+should fail loudly at first use, not surface as `undefined` inside a URL.
 
 All three are `NEXT_PUBLIC_` because auth and data fetching happen in the browser.
 The anon key is public by design; the backend is the enforcement point.
 
 ---
+
+## Design tokens
+
+Defined in `src/app/globals.css`. **Light mode only** — deliberately no
+`prefers-color-scheme` override, because a patient phone in dark mode must still
+render the QR dark-on-white or scanners fail.
+
+| Family | Accent (given) | Interactive fill | Text on white |
+| --- | --- | --- | --- |
+| Brand | `#67A976` | `#3F7A50` | `#326140` |
+| Success | `#5FAE72` | `#3B8A51` | `#2F7043` |
+| Danger | `#C84D4D` | `#C84D4D` | `#9C3333` |
+| Warning | `#E7B547` | dark text only | `#8A6410` |
+| Info | `#86BDD0` | `#3F8BA5` | `#2A6E85` |
+
+The **accent** rung is the palette value as given. Most of them sit at 2–3:1 on
+white, so they carry white text nowhere — they're for surfaces, borders, rings,
+badge fills and the QR frame. The **interactive fill** rung is the darkened
+sibling that clears AA (4.5:1) with white text on buttons. Don't substitute one
+for the other without rechecking contrast; `#E7B547` in particular takes dark
+text only, never white.
+
+Neutrals: `#FFFFFF` page, `#F8FBFA` raised surface (the green tint), `#F1F5F3`
+sunken, `#E4ECE7` / `#D3DED7` borders, `#1B241F` / `#2F3A34` / `#667A6F` text.
+
+shadcn's variable names (`--primary`, `--destructive`, `--ring`, …) are mapped
+onto these tokens, so a component installed via the MCP is themed on arrival and
+`src/components/ui/` never needs editing.
+
+### Typography
+
+Loaded through `next/font/google` in `app/layout.tsx` — self-hosted at build
+time, so there's no runtime CDN dependency and no font files in the repo.
+
+- **Plus Jakarta Sans** (`font-display`) — headings only.
+- **Inter** (`font-sans`) — body and UI. Picked for small-size legibility and
+  real tabular numerals; use the `.tabular` class for fill counts and dosages so
+  digits don't jitter as they update in place.
+- **Geist Mono** (`font-mono`) — tx hashes and token IDs, compared by eye
+  character by character.
 
 ## PWA
 

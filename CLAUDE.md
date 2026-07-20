@@ -15,6 +15,10 @@ This file is the working agreement.
    compose it.
 3. **`src/components/ui/` is generated.** Wrap and compose; don't edit in place
    unless there's no alternative, and say so if you do.
+   - Known exception: `ui/form.tsx` is **hand-written**. The registry returns
+     metadata but no file content for `@shadcn/form`, so `shadcn add form`
+     exits silently. Written by hand with the owner's approval, following the
+     preset's conventions so a future working `add --overwrite` swaps cleanly.
 4. **All backend calls go through `lib/api.ts`.** No bare `fetch` to
    `BACKEND_URL` in a component.
 5. **Role comes from `GET /me`.** Never from JWT claims, never from localStorage,
@@ -53,16 +57,36 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
 2. Check whether a shadcn component covers the UI; install via MCP if so.
 3. Build loading / empty / error states in the same pass, not later.
 
-## Open questions (blocking — resolve before the phase that needs them)
+## Resolved contract decisions
 
-- **Supabase project URL** — arrived truncated as `https://rco…`. Blocks Phase 1.
-- **How the web app learns a scan happened** at doctor/pharmacy stations: polling
-  endpoint, Supabase Realtime, or manual patient-ID entry? Blocks Phases 4–5.
-- **Response shapes** for `/me`, `/patient/qr-token`, `/patient/prescriptions`.
-  Blocks Phase 2 onward.
-- **`/prescriptions` request body**: exact field names, expiry format
-  (ISO date vs null vs epoch), and how "no expiry" is expressed.
-- **`/prescriptions/:id/revoke`**: which role, and does the patient view show
-  revoked prescriptions?
-- **Role provisioning**: how does a signup become a doctor or pharmacy? Is there a
-  seeding step, or does the frontend need a role-selection screen?
+- **Supabase**: `https://rujemygoawvemvwewplq.supabase.co`, anon (legacy JWT) key.
+  Public client keys only — the service-role key never enters this repo.
+- **Scan**: polling, no Supabase Realtime. Two paths, same patient-context shape.
+  IoT stations POST `/stations/scan`; the browser polls
+  `GET /stations/current-scan` (~1.5s, `204` = nothing yet). Camera fallback:
+  the browser decodes the QR and POSTs `/scan` with the operator's JWT, getting
+  patient context inline with no polling. **Build the camera fallback first** —
+  it makes the loop demoable from laptops with no hardware present.
+- **Expiry**: always an ISO 8601 UTC string, or `null` for no expiry. Never
+  epoch. Same format in requests and responses.
+- **QR token**: the 30s is a real server-side expiry — the backend rejects an
+  expired `qr_token` with 422. Show a hard countdown but refetch at ~25s so it
+  never dies on screen.
+- **Revoke**: doctor only; burns all remaining uses. Revoked prescriptions
+  **do** appear in the patient's history, marked revoked, for audit
+  transparency.
+- **Backend base URL**: `http://localhost:8080` for dev; Railway URL later.
+  CORS is already open (`origin: true, credentials: true`) — no CORS work here.
+- **Error envelope**: `{ error: { code, message, details? } }` on every endpoint.
+  Branch on `code`, never on message text. See the code table in
+  `ARCHITECTURE.md`; the four `PRESCRIPTION_*` 409s render as blocked states.
+- **Roles**: pre-seeded server-side. No signup, no role picker, no verification
+  UI — doctors and pharmacies can't self-verify (regulator constraint).
+
+## Open questions
+
+- **Response shapes** for `/me` (incl. which station the caller owns),
+  `/patient/qr-token`, `/patient/prescriptions`, and the shared patient-context
+  shape returned by the two scan paths. Confirm against the live backend in
+  Phase 1 and write them into `lib/types.ts` before building screens on them.
+- **Seeded test credentials** — arriving at the end of backend Phase 1.

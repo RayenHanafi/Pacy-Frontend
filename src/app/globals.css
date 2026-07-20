@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * Pacy design tokens — light mode only (clinical, projector-friendly, and the
+ * best contrast for scanning the patient QR).
+ *
+ * Given brand hexes are the *accent* rung of each scale. Several of them are
+ * too light to carry white text, so each family also has a `-strong` rung that
+ * clears WCAG AA (4.5:1) for buttons, and a `-text` rung for colored text on
+ * white. Contrast ratios are noted; don't swap a rung without rechecking.
+ *
+ * There is deliberately no `.dark` block and no prefers-color-scheme override:
+ * a patient's phone in dark mode must still render the QR dark-on-white or
+ * scanners fail. `shadcn init` writes one — if you re-run init, delete it again.
+ */
+:root {
+  /* ---- Brand / primary — #67A976 ---- */
+  --brand-50: #f1f8f3;
+  --brand-100: #dfefe4;
+  --brand-200: #c1e0cb;
+  --brand-300: #9bccaa;
+  --brand-400: #67a976; /* given accent — 2.8:1 on white, NOT for text */
+  --brand-500: #4e9160;
+  --brand-600: #3f7a50; /* interactive fill — 5.1:1 with white text */
+  --brand-700: #326140;
+  --brand-900: #1d3a26;
+
+  /* ---- Success — #5FAE72 (mint + dispense confirmed) ---- */
+  --success: #5fae72; /* accent / fill tint */
+  --success-strong: #3b8a51; /* 4.9:1 with white */
+  --success-text: #2f7043;
+  --success-surface: #eef8f1;
+
+  /* ---- Danger — #C84D4D (expired, exhausted, revoked, chain refusal) ---- */
+  --danger: #c84d4d; /* 4.5:1 with white — usable as a fill as-is */
+  --danger-strong: #a83a3a;
+  --danger-text: #9c3333;
+  --danger-surface: #fdf1f1;
+
+  /* ---- Warning — #E7B547 (expiring soon, low fills) ---- */
+  --warning: #e7b547; /* 1.9:1 on white — takes DARK text, never white */
+  --warning-strong: #c9971f;
+  --warning-text: #8a6410; /* amber-toned text on white, AA */
+  --warning-surface: #fdf6e6;
+
+  /* ---- Info — #86BDD0 (QR refresh, neutral notices) ---- */
+  --info: #86bdd0; /* 2.1:1 on white — takes DARK text */
+  --info-strong: #3f8ba5;
+  --info-text: #2a6e85;
+  --info-surface: #eff7fa;
+
+  /* ---- Neutrals — white base, green-tinted surfaces ---- */
+  --surface-page: #ffffff;
+  --surface-raised: #f8fbfa; /* the green-tinted surface */
+  --surface-sunken: #f1f5f3;
+  --border-subtle: #e4ece7;
+  --border-default: #d3ded7;
+  --text-strong: #1b241f;
+  --text-default: #2f3a34;
+  --text-muted: #667a6f;
+
+  /* ---- shadcn contract ---- *
+   * shadcn components read these names. Mapped onto the tokens above so an
+   * MCP-installed component is themed on arrival with no edits to ui/.
+   */
+  --background: var(--surface-page);
+  --foreground: var(--text-default);
+  --card: var(--surface-page);
+  --card-foreground: var(--text-default);
+  --popover: var(--surface-page);
+  --popover-foreground: var(--text-default);
+  --primary: var(--brand-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-50);
+  --secondary-foreground: var(--brand-700);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--brand-100);
+  --accent-foreground: var(--brand-700);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--brand-400);
+  --radius: 0.625rem;
+
+  /* Sidebar (doctor/pharmacy desktop shells). */
+  --sidebar: var(--surface-raised);
+  --sidebar-foreground: var(--text-default);
+  --sidebar-primary: var(--brand-600);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-100);
+  --sidebar-accent-foreground: var(--brand-700);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: var(--brand-400);
+
+  /* Charts aren't used yet; keep them on-palette so they can't surprise us. */
+  --chart-1: var(--brand-400);
+  --chart-2: var(--info-strong);
+  --chart-3: var(--warning-strong);
+  --chart-4: var(--danger);
+  --chart-5: var(--brand-700);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Semantic families, usable as bg-success / text-warning-text / etc. */
+  --color-brand: var(--brand-400);
+  --color-brand-strong: var(--brand-600);
+  --color-brand-surface: var(--brand-50);
+  --color-success: var(--success);
+  --color-success-strong: var(--success-strong);
+  --color-success-text: var(--success-text);
+  --color-success-surface: var(--success-surface);
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-text: var(--danger-text);
+  --color-danger-surface: var(--danger-surface);
+  --color-warning: var(--warning);
+  --color-warning-strong: var(--warning-strong);
+  --color-warning-text: var(--warning-text);
+  --color-warning-surface: var(--warning-surface);
+  --color-info: var(--info);
+  --color-info-strong: var(--info-strong);
+  --color-info-text: var(--info-text);
+  --color-info-surface: var(--info-surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-strong: var(--text-strong);
+  --color-text-muted: var(--text-muted);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-jakarta);
+  --font-heading: var(--font-jakarta);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* Fill counts and dosages sit in columns and change in place — proportional
+ * digits make them jitter as they update. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
