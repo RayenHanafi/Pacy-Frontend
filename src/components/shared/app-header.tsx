@@ -2,7 +2,6 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { roleLabel } from "@/lib/roles";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -21,19 +20,25 @@ export function AppHeader({ me }: { me: Me }) {
   }
 
   return (
-    <header className="border-b border-border-subtle bg-surface-raised">
+    // Gradient bar: white text only. Its lightest stop (seagrass) is 3.4:1,
+    // so dark text on the right-hand end would fail contrast.
+    <header className="brand-gradient text-white">
       <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-4 py-3">
         {/* Wordmark placeholder — swap for /logo.svg when it exists. */}
-        <span className="font-display text-lg font-bold text-text-strong">
-          Pacy
+        <span className="font-display text-lg font-bold text-white">Pacy</span>
+        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-white">
+          {roleLabel[me.role]}
         </span>
-        <Badge variant="secondary">{roleLabel[me.role]}</Badge>
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="hidden text-sm text-text-muted sm:inline">
+          <span className="hidden text-sm text-white/85 sm:inline">
             {me.full_name}
           </span>
-          <Button variant="outline" size="sm" onClick={signOut}>
+          <Button
+            size="sm"
+            onClick={signOut}
+            className="border border-white/40 bg-white/10 text-white hover:bg-white/20"
+          >
             Sign out
           </Button>
         </div>

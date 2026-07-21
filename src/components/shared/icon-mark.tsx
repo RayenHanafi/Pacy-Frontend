@@ -20,7 +20,9 @@ export function IconMark({ size }: { size: number }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#3f7a50",
+        // The brand gradient: Dark Teal → Teal → Seagrass.
+        backgroundImage:
+          "linear-gradient(135deg, #014342 0%, #107d7c 55%, #5c9682 100%)",
         borderRadius: unit * 3.5,
       }}
     >

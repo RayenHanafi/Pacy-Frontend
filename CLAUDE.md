@@ -119,6 +119,20 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
 Read `../Pacy-Backend/FRONTEND_HANDOFF.md`. Pasted handoffs arrived truncated
 three times; the corruption is in the relay, so the file is the source of truth.
 
+## Palette
+
+Teal, light mode only. Dark Teal `#014342`, Teal `#107D7C`, Seagrass
+`#5C9682`, with Soft Aqua-Teal `#1AA3AD` and Light Mint-Teal `#73B39A`
+supporting. Signature gradient (`.brand-gradient`, `--brand-gradient`) runs
+Dark Teal → Teal → Seagrass and **carries white text only** — its lightest stop
+is 3.4:1, so dark text fails on the right-hand end.
+
+`--brand-600` (`#107D7C`, 4.9:1 with white) is the only brand rung safe as a
+button fill; `--brand-700`/`900` for colored text. 300/400/500 are accents and
+must never carry text. Success stays green, not teal, so "dispensed" can't be
+mistaken for chrome. The QR renders near-black on white regardless of palette —
+a tinted QR is the classic way to make one unscannable.
+
 ## PWA
 
 - **The service worker never caches a backend response.** `public/sw.js` is

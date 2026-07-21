@@ -89,7 +89,9 @@ export function QrCard() {
                 size={240}
                 level="M"
                 bgColor="#ffffff"
-                fgColor="#1b241f"
+                // Near-black, not brand teal: scanners want maximum contrast,
+                // and a colored QR is the classic way to make one unreadable.
+                fgColor="#10201f"
                 className="h-auto w-full max-w-[240px]"
               />
 

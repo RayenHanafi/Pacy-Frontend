@@ -16,22 +16,38 @@
  * scanners fail. `shadcn init` writes one — if you re-run init, delete it again.
  */
 :root {
-  /* ---- Brand / primary — #67A976 ---- */
-  --brand-50: #f1f8f3;
-  --brand-100: #dfefe4;
-  --brand-200: #c1e0cb;
-  --brand-300: #9bccaa;
-  --brand-400: #67a976; /* given accent — 2.8:1 on white, NOT for text */
-  --brand-500: #4e9160;
-  --brand-600: #3f7a50; /* interactive fill — 5.1:1 with white text */
-  --brand-700: #326140;
-  --brand-900: #1d3a26;
+  /* ---- Brand / primary — teal ----
+   * Given palette: Dark Teal #014342, Teal #107D7C, Seagrass #5C9682, with
+   * Soft Aqua-Teal #1AA3AD and Light Mint-Teal #73B39A as supporting tones.
+   * Ordered by luminance so the scale stays monotonic.
+   */
+  --brand-50: #f0f7f7;
+  --brand-100: #d5ebea;
+  --brand-200: #a9d7d5;
+  --brand-300: #73b39a; /* light mint-teal — 3.9:1, NOT for text */
+  --brand-400: #1aa3ad; /* soft aqua-teal — 3.1:1, NOT for text */
+  --brand-500: #5c9682; /* seagrass — 3.4:1, accent only */
+  --brand-600: #107d7c; /* Teal — interactive fill, 4.9:1 with white text */
+  --brand-700: #0b5f5e; /* 7.0:1 — colored text on white */
+  --brand-900: #014342; /* Dark Teal — 10.5:1 */
+
+  /* The signature gradient: Dark Teal → Teal → Seagrass. Always carries
+   * white text; its lightest stop is 3.4:1, so never put dark text on it. */
+  --brand-gradient: linear-gradient(
+    100deg,
+    #014342 0%,
+    #107d7c 55%,
+    #5c9682 100%
+  );
 
   /* ---- Success — #5FAE72 (mint + dispense confirmed) ---- */
   --success: #5fae72; /* accent / fill tint */
   --success-strong: #3b8a51; /* 4.9:1 with white */
   --success-text: #2f7043;
-  --success-surface: #eef8f1;
+  /* Kept green rather than teal so "dispensed" never reads as chrome — it has
+   * to stay distinct from the brand now that the brand is teal. Surface nudged
+   * greener to separate it from the teal-tinted neutrals. */
+  --success-surface: #eaf7ee;
 
   /* ---- Danger — #C84D4D (expired, exhausted, revoked, chain refusal) ---- */
   --danger: #c84d4d; /* 4.5:1 with white — usable as a fill as-is */
@@ -51,15 +67,15 @@
   --info-text: #2a6e85;
   --info-surface: #eff7fa;
 
-  /* ---- Neutrals — white base, green-tinted surfaces ---- */
+  /* ---- Neutrals — white base, teal-tinted surfaces ---- */
   --surface-page: #ffffff;
-  --surface-raised: #f8fbfa; /* the green-tinted surface */
-  --surface-sunken: #f1f5f3;
-  --border-subtle: #e4ece7;
-  --border-default: #d3ded7;
-  --text-strong: #1b241f;
-  --text-default: #2f3a34;
-  --text-muted: #667a6f;
+  --surface-raised: #f6fbfa; /* the teal-tinted surface */
+  --surface-sunken: #eef5f4;
+  --border-subtle: #e0edeb;
+  --border-default: #cfe0dd;
+  --text-strong: #10201f;
+  --text-default: #263735;
+  --text-muted: #5f7876;
 
   /* ---- shadcn contract ---- *
    * shadcn components read these names. Mapped onto the tokens above so an
@@ -193,4 +209,9 @@
  * digits make them jitter as they update. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* The brand gradient. White text only — see the token's note. */
+.brand-gradient {
+  background-image: var(--brand-gradient);
 }

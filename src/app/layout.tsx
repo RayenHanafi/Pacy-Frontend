@@ -40,7 +40,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#3f7a50",
+  themeColor: "#107d7c",
   colorScheme: "light",
   // Patient view is a QR code held up to a scanner; pinch-zoom would only
   // get in the way.

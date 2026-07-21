@@ -85,13 +85,20 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center px-6 py-16">
-      <Card>
+      <Card className="overflow-hidden pt-0">
+        {/* The brand's first impression — white text only on the gradient. */}
+        <div className="brand-gradient px-6 py-8">
+          <p className="font-display text-3xl font-bold text-white">Pacy</p>
+          <p className="mt-1 text-sm text-white/85">
+            One prescription. One token. One time.
+          </p>
+        </div>
         <CardHeader>
-          <CardTitle className="font-display text-2xl text-text-strong">
-            Pacy
+          <CardTitle className="font-display text-text-strong">
+            Sign in
           </CardTitle>
           <CardDescription>
-            One prescription. One token. One time.
+            Accounts are pre-seeded for the demo.
           </CardDescription>
         </CardHeader>
         <CardContent>
