@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { ServiceWorker } from "@/components/shared/service-worker";
 import { TestnetFooter } from "@/components/shared/testnet-footer";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -32,6 +33,10 @@ export const metadata: Metadata = {
   title: "Pacy — One prescription. One token. One time.",
   description:
     "Prescription tokenization on Cardano. Can't be forged, over-filled, or dispensed after expiry.",
+  applicationName: "Pacy",
+  // iOS ignores the manifest's display mode; this is what makes an installed
+  // patient view open without Safari's chrome over the QR code.
+  appleWebApp: { capable: true, title: "Pacy", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -62,6 +67,7 @@ export default function RootLayout({
           <div className="flex-1">{children}</div>
           <TestnetFooter />
         </Providers>
+        <ServiceWorker />
       </body>
     </html>
   );

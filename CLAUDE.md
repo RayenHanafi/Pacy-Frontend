@@ -119,12 +119,27 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
 Read `../Pacy-Backend/FRONTEND_HANDOFF.md`. Pasted handoffs arrived truncated
 three times; the corruption is in the relay, so the file is the source of truth.
 
+## PWA
+
+- **The service worker never caches a backend response.** `public/sw.js` is
+  hand-written for exactly this reason: it returns early for any non-GET and
+  any cross-origin request, so the API and Supabase are never seen by the
+  caching logic at all. Only `/_next/static/` and `/icons/` are cached, both
+  content-addressed. A cached `/patient/prescriptions` would show a spent fill
+  as available and a cached QR token would already be rejected — both worse
+  than being offline, because they look correct. Don't swap in a generated
+  worker without re-deriving this.
+- Registered in production only (`components/shared/service-worker.tsx`); in
+  dev it serves stale Turbopack chunks after an edit.
+- Icons are generated at build time from `components/shared/icon-mark.tsx` via
+  `next/og` — no binary assets in the repo. Swap that one file when the real
+  logo lands and the favicon, apple-touch icon and both manifest sizes follow.
+  The mark is text-free because `ImageResponse` needs font data to draw glyphs.
+
 ## Open questions
 
-- **Production backend URL** — Railway deploy in progress; arrives in a
-  follow-up. Read it from `NEXT_PUBLIC_BACKEND_URL`; never hardcode localhost.
-- **`/health` reports `configured.supabase_auth: false`** while every other flag
-  is true, despite auth working. Cosmetic so far.
+None blocking. Backend is deployed at
+`https://pacy-backend-production.up.railway.app`.
 
 All response shapes (`/me`, `/patient/qr-token`, `/patient/prescriptions`, both
 scan paths, mint / dispense / revoke) are verified live and typed in
