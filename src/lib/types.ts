@@ -65,7 +65,12 @@ export type ApiErrorCode =
   | "PRESCRIPTION_REVOKED" // 409  │
   | "PRESCRIPTION_NOT_ACTIVE" // 409 ─┘
   | "CHAIN_ERROR" // 502 — on-chain submit failed; retryable
-  | "INTERNAL_ERROR"; // 500
+  | "INTERNAL_ERROR" // 500
+  // 409 — doctor has no active signing key. A setup step, not an error state.
+  | "DOCTOR_KEY_NOT_ENROLLED"
+  // 422 — signature didn't verify. Never retry silently: a prescription that
+  // fails to sign must not be written.
+  | "INVALID_DOCTOR_SIGNATURE";
 
 /**
  * The four codes that mean "the chain refused this dispense." These are the
@@ -230,4 +235,28 @@ export interface CreatePrescriptionBody {
   };
   max_uses: number; // int >= 1
   expires_at: Expiry;
+  /**
+   * Base64 raw (P1363) ECDSA signature over the canonical payload. Omitted
+   * only while the backend's signing release is not yet deployed — the older
+   * backend ignores the field, so sending it early is safe.
+   */
+  doctor_signature?: string;
+}
+
+/**
+ * GET /doctor/signing-key. `enrolled: false` is the whole body when this
+ * doctor has never enrolled.
+ */
+export interface SigningKeyStatus {
+  enrolled: boolean;
+  fingerprint?: string;
+  enrolled_at?: IsoDateTime;
+}
+
+/** POST /doctor/signing-key — 201. */
+export interface SigningKeyEnrolment {
+  fingerprint: string;
+  enrolled_at: IsoDateTime;
+  /** True when this replaced an existing active key (new or lost device). */
+  replaced_previous: boolean;
 }

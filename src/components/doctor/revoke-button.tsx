@@ -37,7 +37,11 @@ export function RevokeButton({
   return (
     <div className="space-y-3">
       {revoke.isError ? (
-        <BlockedPanel error={revoke.error} onRetry={() => revoke.reset()} />
+        <BlockedPanel
+          error={revoke.error}
+          onRetry={() => revoke.reset()}
+          fallbackTitle="Couldn't revoke"
+        />
       ) : null}
 
       <AlertDialog>

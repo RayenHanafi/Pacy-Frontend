@@ -36,6 +36,18 @@ const BLOCKED_COPY: Partial<
     body: "Nothing was consumed — no fill was used. It's safe to try again.",
     retryable: true,
   },
+  DOCTOR_KEY_NOT_ENROLLED: {
+    title: "Signing not set up on this device",
+    body: "Prescriptions must be signed with your own key before they can be minted. Set up signing to continue — nothing was written.",
+  },
+  INVALID_DOCTOR_SIGNATURE: {
+    // Almost always means this device's key is no longer the active one —
+    // the doctor enrolled elsewhere since. Re-enrolling on this device fixes
+    // it. Deliberately not retryable: a prescription that fails to sign must
+    // not be written, and retrying the same signature can't help.
+    title: "Signature didn't verify",
+    body: "This device's signing key doesn't match the one on record — it's usually because signing was set up on another device since. Set up signing again here. Nothing was written.",
+  },
   FORBIDDEN: {
     title: "Not permitted",
     body: "This account can't perform that action.",
@@ -51,9 +63,17 @@ export function BlockedPanel({
   onRetry,
   patientName,
   emphasis = false,
+  fallbackTitle = "Couldn't dispense",
 }: {
   error: unknown;
   onRetry?: () => void;
+  /**
+   * Heading for codes with no copy of their own. Defaults to the pharmacy
+   * wording because that's where most blocked states occur — every other
+   * caller must pass its own verb. A doctor being told a prescription
+   * "couldn't be dispensed" reads as a broken app.
+   */
+  fallbackTitle?: string;
   /** Whose prescription was refused — shown so the refusal is unambiguous. */
   patientName?: string;
   /**
@@ -66,7 +86,7 @@ export function BlockedPanel({
   const code = error instanceof ApiError ? error.code : undefined;
   const copy = code ? BLOCKED_COPY[code] : undefined;
 
-  const title = copy?.title ?? "Couldn't dispense";
+  const title = copy?.title ?? fallbackTitle;
   const body =
     copy?.body ??
     (error instanceof Error ? error.message : "Something went wrong.");

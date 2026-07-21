@@ -114,6 +114,32 @@ Preprod testnet only. Keep the "Cardano preprod testnet — demo" footer visible
   `RowVariant` comment in `pharmacy/dispense-list.tsx` before "fixing" it. The
   in-flight double-click guard still applies to every row.
 
+## Doctor signing keys
+
+- **The private key is generated non-extractable and stored in IndexedDB**,
+  scoped by doctor user id. There is deliberately **no export, backup or sync**
+  — an exportable key is a copyable key, which destroys the property being
+  bought. Re-enrolment is the recovery path; the backend retains old keys so
+  past prescriptions stay verifiable.
+- **`lib/signing.ts`'s `sortDeep`/`canonicalJson` is a verbatim port of the
+  backend's `src/lib/hash.ts`.** Do not reformat it or swap in a
+  canonical-JSON library. A one-byte difference fails the mint with
+  `INVALID_DOCTOR_SIGNATURE` and looks like a mystery.
+- **Sign the canonical JSON bytes, never a hash of them** — WebCrypto applies
+  SHA-256 internally, so pre-hashing double-hashes and always fails.
+- **The signed payload has five fields and includes `doctor_id`**, which is
+  *not* in the request body (the backend reads it from the JWT). Sign and send
+  the same `expires_at` string.
+- **ECDSA is non-deterministic**: the same payload signs to a different value
+  every time and both are valid. Never cache, compare or dedupe on a signature.
+- **`useSigningGate` treats a 404 on `/doctor/signing-key` as "signing not
+  deployed yet"**, distinct from "not enrolled", and prescribes unsigned. The
+  pre-signing backend ignores the extra field (verified), so one build works
+  against both. Once the signing release is live, that branch is dead weight
+  and can be removed.
+- Signing needs a secure context: `crypto.subtle` is undefined over a plain-http
+  LAN IP, so a doctor must be on https:// or localhost.
+
 ## Backend handoffs are files, not messages
 
 Read `../Pacy-Backend/FRONTEND_HANDOFF.md`. Pasted handoffs arrived truncated

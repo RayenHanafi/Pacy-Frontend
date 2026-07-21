@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useCreatePrescription } from "@/lib/queries";
+import { signPayload } from "@/lib/signing";
 import type { Prescription, ScannedPatient } from "@/lib/types";
 
 const schema = z.object({
@@ -44,12 +46,16 @@ type FormValues = z.infer<typeof schema>;
 
 export function PrescribeForm({
   patient,
+  doctorUserId,
   onMinted,
 }: {
   patient: ScannedPatient;
+  /** The doctor's own user id — part of the signed payload, not the body. */
+  doctorUserId: string;
   onMinted: (prescription: Prescription) => void;
 }) {
   const mutation = useCreatePrescription();
+  const [signingError, setSigningError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -63,24 +69,48 @@ export function PrescribeForm({
     },
   });
 
-  function onSubmit(values: FormValues) {
-    mutation.mutate(
-      {
+  async function onSubmit(values: FormValues) {
+    setSigningError(null);
+
+    const drug_details = {
+      drug: values.drug,
+      dosage: values.dosage,
+      instructions: values.instructions,
+      diagnosis: values.diagnosis,
+    };
+    const max_uses = Number(values.max_uses);
+    // Date input gives a local calendar day; the contract wants ISO UTC or
+    // null. End-of-day avoids a prescription expiring the morning the doctor
+    // picked. Computed once: the signature covers this exact string, so
+    // deriving it twice risks signing one value and sending another.
+    const expires_at = values.expires_at
+      ? new Date(`${values.expires_at}T23:59:59Z`).toISOString()
+      : null;
+
+    let doctor_signature: string;
+    try {
+      doctor_signature = await signPayload(doctorUserId, {
         patient_id: patient.id,
-        drug_details: {
-          drug: values.drug,
-          dosage: values.dosage,
-          instructions: values.instructions,
-          diagnosis: values.diagnosis,
-        },
-        max_uses: Number(values.max_uses),
-        // Date input gives a local calendar day; the contract wants ISO UTC
-        // or null. End-of-day avoids a prescription expiring the morning the
-        // doctor picked.
-        expires_at: values.expires_at
-          ? new Date(`${values.expires_at}T23:59:59Z`).toISOString()
-          : null,
-      },
+        // Not in the request body — the backend reads it from the JWT — but
+        // it IS in the signed payload.
+        doctor_id: doctorUserId,
+        drug_details,
+        max_uses,
+        expires_at,
+      });
+    } catch (error) {
+      // Fail closed: a prescription that can't be signed must not be written,
+      // and must not be sent unsigned for the server to reject.
+      setSigningError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't sign this prescription on this device.",
+      );
+      return;
+    }
+
+    mutation.mutate(
+      { patient_id: patient.id, drug_details, max_uses, expires_at, doctor_signature },
       { onSuccess: (result) => result && onMinted(result) },
     );
   }
@@ -193,10 +223,23 @@ export function PrescribeForm({
               />
             </div>
 
+            {signingError ? (
+              <div className="rounded-lg border border-danger/40 bg-danger-surface p-4">
+                <p className="font-medium text-danger-text">
+                  Couldn&rsquo;t sign this prescription
+                </p>
+                <p className="text-sm text-foreground">{signingError}</p>
+                <p className="pt-1 text-sm text-text-muted">
+                  Nothing was written — no token was minted.
+                </p>
+              </div>
+            ) : null}
+
             {mutation.isError ? (
               <BlockedPanel
                 error={mutation.error}
                 onRetry={() => mutation.reset()}
+                fallbackTitle="Couldn't prescribe"
               />
             ) : null}
 

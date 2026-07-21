@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, CHAIN_TIMEOUT_MS } from "./api";
+import { generateAndStoreKey, getLocalKeyState } from "./signing";
 import { getSupabaseClient } from "./supabase";
 import type {
   CreatePrescriptionBody,
@@ -13,6 +14,8 @@ import type {
   Prescription,
   QrToken,
   ScanResult,
+  SigningKeyEnrolment,
+  SigningKeyStatus,
 } from "./types";
 
 /** Query keys in one place so invalidation can't drift from fetching. */
@@ -24,6 +27,8 @@ export const queryKeys = {
   currentScan: ["stations", "current-scan"] as const,
   patientPrescriptions: ["patient", "prescriptions"] as const,
   doctorPrescriptions: ["doctor", "prescriptions"] as const,
+  signingKey: ["doctor", "signing-key"] as const,
+  localSigningKey: (userId: string) => ["signing-key", "local", userId] as const,
 };
 
 /**
@@ -132,6 +137,63 @@ export function usePatientPrescriptions() {
     queryFn: async () =>
       (await api<PatientPrescriptionsResponse>("/patient/prescriptions"))
         ?.prescriptions ?? [],
+  });
+}
+
+/**
+ * The server's view of this doctor's signing key.
+ *
+ * `refetchOnMount: "always"` is load-bearing. Signing went live mid-session on
+ * demo day; a doctor whose tab predated that deploy would otherwise keep an
+ * old verdict and prescribe unsigned until a full reload. The answer is cheap
+ * and it decides whether prescribing is possible at all, so re-ask every time
+ * the dashboard mounts.
+ */
+export function useSigningKeyStatus() {
+  return useQuery({
+    queryKey: queryKeys.signingKey,
+    queryFn: () => api<SigningKeyStatus>("/doctor/signing-key"),
+    refetchOnMount: "always",
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+/** What this device holds. Read from IndexedDB, never from the network. */
+export function useLocalSigningKey(doctorUserId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.localSigningKey(doctorUserId ?? ""),
+    queryFn: () => getLocalKeyState(doctorUserId as string),
+    enabled: Boolean(doctorUserId),
+    retry: false,
+  });
+}
+
+/**
+ * Generate a keypair on this device and enrol its public half.
+ *
+ * Also used for re-enrolment on a new or lost device: the server replaces the
+ * active key but retains previous ones, so prescriptions already written stay
+ * verifiable forever.
+ */
+export function useEnrolSigningKey(doctorUserId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!doctorUserId) throw new Error("No doctor id.");
+      const { publicKeyB64 } = await generateAndStoreKey(doctorUserId);
+      return api<SigningKeyEnrolment>("/doctor/signing-key", {
+        method: "POST",
+        json: { public_key: publicKeyB64 },
+      });
+    },
+    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.signingKey });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.localSigningKey(doctorUserId ?? ""),
+      });
+    },
   });
 }
 
