@@ -24,9 +24,10 @@ build/
 dist/
 next-env.d.ts
 
-# ---- PWA (service worker is generated, never hand-edited) ----
-public/sw.js
-public/sw.js.map
+# ---- PWA ----
+# public/sw.js is NOT ignored: ours is hand-written source, not generated
+# output (see the header comment in it for why). This block used to ignore it,
+# which shipped a production build with no service worker at all.
 public/workbox-*.js
 public/workbox-*.js.map
 public/fallback-*.js
