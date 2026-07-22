@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -97,9 +96,6 @@ export default function LoginPage() {
           <CardTitle className="font-display text-text-strong">
             Sign in
           </CardTitle>
-          <CardDescription>
-            Accounts are pre-seeded for the demo.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -138,11 +134,6 @@ export default function LoginPage() {
               {pending ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-
-          <p className="mt-4 text-xs text-text-muted">
-            Accounts are pre-seeded. There&rsquo;s no signup — doctors and pharmacies
-            are verified off-platform.
-          </p>
         </CardContent>
       </Card>
     </main>
