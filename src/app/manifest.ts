@@ -2,12 +2,12 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Pacy — prescription tokenization",
+    name: "Pacy — Prescription Trust Network",
     short_name: "Pacy",
     description:
       "One prescription. One token. One time. Prescription tokenization on Cardano.",
-    // The patient holds a phone up to a scanner; the doctor and pharmacy views
-    // are desktop. `start_url` is the role router, which sends each of them on.
+    // The public landing page is also the installed app's entry point. From
+    // there, the CTA opens the existing sign-in and role-routing flow.
     start_url: "/",
     display: "standalone",
     orientation: "portrait",
@@ -16,9 +16,8 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-      // Same file entered twice rather than one "any maskable" entry, which
-      // Next's manifest type doesn't accept. The mark sits well inside the
-      // safe zone, so it survives Android's mask without a padded variant.
+      // The supplied square mark has enough white safe area to survive Android
+      // masks without needing a separately padded asset.
       {
         src: "/icons/icon-512.png",
         sizes: "512x512",

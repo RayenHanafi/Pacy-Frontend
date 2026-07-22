@@ -171,10 +171,9 @@ a tinted QR is the classic way to make one unscannable.
   worker without re-deriving this.
 - Registered in production only (`components/shared/service-worker.tsx`); in
   dev it serves stale Turbopack chunks after an edit.
-- Icons are generated at build time from `components/shared/icon-mark.tsx` via
-  `next/og` — no binary assets in the repo. Swap that one file when the real
-  logo lands and the favicon, apple-touch icon and both manifest sizes follow.
-  The mark is text-free because `ImageResponse` needs font data to draw glyphs.
+- The supplied Pacy mark is served as static, purpose-sized assets: `favicon.ico`,
+  `icon.png`, `apple-icon.png`, and the 192/512 manifest icons under `public/icons`.
+  Keep all variants in sync if the brand mark changes.
 
 ## Open questions
 
