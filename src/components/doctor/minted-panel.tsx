@@ -18,11 +18,13 @@ import type { Prescription } from "@/lib/types";
 export function MintedPanel({
   prescription,
   patientName,
-  onDone,
+  onNextPatient,
+  onWriteAnother,
 }: {
   prescription: Prescription;
   patientName: string;
-  onDone: () => void;
+  onNextPatient: () => void;
+  onWriteAnother: () => void;
 }) {
   const [revoked, setRevoked] = useState<Prescription | null>(null);
   const [revokedAt, setRevokedAt] = useState<number | undefined>(undefined);
@@ -92,8 +94,12 @@ export function MintedPanel({
         </div>
 
         <div className="flex flex-wrap items-start gap-3">
-          <Button variant="outline" onClick={onDone}>
-            Write another prescription
+          <Button onClick={onNextPatient}>
+            Done — wait for next scan
+          </Button>
+
+          <Button variant="outline" onClick={onWriteAnother}>
+            Write another for this patient
           </Button>
 
           {!revoked && canRevoke(current) ? (

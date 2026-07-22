@@ -107,6 +107,10 @@ export async function api<T>(
 ): Promise<T | undefined> {
   const res = await fetch(`${env.backendUrl}${path}`, {
     ...init,
+    // Prescription and QR state is security-sensitive, cross-device state.
+    // The service worker already ignores backend requests; this also bypasses
+    // the browser's ordinary HTTP cache for every API call.
+    cache: "no-store",
     ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     headers: {
       ...(json !== undefined ? { "Content-Type": "application/json" } : {}),

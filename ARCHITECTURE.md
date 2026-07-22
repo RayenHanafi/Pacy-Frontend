@@ -194,7 +194,10 @@ Camera: browser decodes QR ──POST /scan (operator JWT)──► patient cont
 ```
 
 `GET /me` tells the browser which station it owns. No Supabase Realtime — polling
-only, by design. Poll only while the "waiting for patient" screen is focused.
+only, by design. Each IoT scan is consumed by the first successful browser poll.
+When staff finish a patient, the browser clears that delivered result before
+returning to the waiting screen so only a genuinely new scan can open a patient.
+Poll only while the "waiting for patient" screen is focused.
 
 ---
 
@@ -205,6 +208,10 @@ only, by design. Poll only while the "waiting for patient" screen is focused.
   ring so the patient understands the code rotates.
 - Pharmacy/doctor scan inbox: `GET /stations/current-scan` at 1.5s while the
   "waiting for patient" screen is focused, stopped otherwise.
+- Patient prescription history: `GET /patient/prescriptions` every 5s while
+  the PWA is visible, plus an immediate refetch on focus/reconnect. Mint, burn,
+  and revoke happen in other browsers, so local query invalidation cannot keep
+  the patient's phone current. Polling stops while backgrounded to save power.
 - Everything else: fetch on mount + invalidate after mutations.
 
 ---

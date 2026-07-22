@@ -26,7 +26,7 @@ export function PatientContextBar({
         className="ml-auto"
         onClick={onClear}
       >
-        Done / next patient
+        Done — next patient
       </Button>
     </div>
   );

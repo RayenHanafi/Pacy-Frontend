@@ -32,6 +32,15 @@ export const queryKeys = {
 };
 
 /**
+ * Chain writes happen in a different browser (doctor or pharmacy), so the
+ * patient's QueryClient cannot be invalidated by the mutation that changed
+ * the prescription. Poll while the PWA is visible to converge shortly after
+ * the backend confirms the transaction, without consuming battery while the
+ * app is backgrounded.
+ */
+export const PATIENT_PRESCRIPTIONS_REFRESH_MS = 5_000;
+
+/**
  * Is the browser holding a Supabase session at all?
  *
  * This is *not* the role authority — it answers only "is there a token to
@@ -130,13 +139,26 @@ export function useScanQrToken() {
   });
 }
 
-/** The patient's full history, including revoked entries, for audit clarity. */
+/**
+ * The patient's full history, including revoked entries, for audit clarity.
+ *
+ * This is cross-device state: doctors mint and revoke from one browser, and
+ * pharmacies dispense from another. A local cache invalidation cannot reach
+ * the patient's phone, so foreground polling is the synchronization path.
+ */
 export function usePatientPrescriptions() {
   return useQuery({
     queryKey: queryKeys.patientPrescriptions,
     queryFn: async () =>
       (await api<PatientPrescriptionsResponse>("/patient/prescriptions"))
         ?.prescriptions ?? [],
+    refetchInterval: PATIENT_PRESCRIPTIONS_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    // Mobile standalone PWAs reliably emit visibility/online changes even
+    // when they do not emit a traditional desktop window-focus event.
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    staleTime: 0,
   });
 }
 

@@ -12,11 +12,13 @@ import { PatientContextBar } from "@/components/shared/patient-context-bar";
 import { ScanPanel } from "@/components/shared/scan-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMe } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys, useMe } from "@/lib/queries";
 import { useSigningGate } from "@/lib/use-signing-gate";
 import type { Prescription, ScanResult } from "@/lib/types";
 
 export default function DoctorHome() {
+  const queryClient = useQueryClient();
   const { data: me } = useMe();
   const gate = useSigningGate();
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -24,8 +26,11 @@ export default function DoctorHome() {
   const onScanned = useCallback((result: ScanResult) => setScan(result), []);
 
   function clearPatient() {
-    setScan(null);
+    // ScanPanel remounts when scan becomes null. Remove the delivered result
+    // first so React Query cannot replay the completed patient from its cache.
+    queryClient.removeQueries({ queryKey: queryKeys.currentScan, exact: true });
     setMinted(null);
+    setScan(null);
   }
 
   if (!me || gate.state === "loading") {
@@ -84,7 +89,8 @@ export default function DoctorHome() {
         <MintedPanel
           prescription={minted}
           patientName={scan.patient.full_name}
-          onDone={() => setMinted(null)}
+          onNextPatient={clearPatient}
+          onWriteAnother={() => setMinted(null)}
         />
       ) : (
         <PrescribeForm
