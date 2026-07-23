@@ -1,6 +1,10 @@
 "use client";
 
-import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
+import {
+  EventTrail,
+  MedicineList,
+  StatusPill,
+} from "@/components/shared/prescription-meta";
 import { formatDate } from "@/components/shared/tx-hash";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -19,20 +23,9 @@ function PrescriptionCard({ prescription }: { prescription: Prescription }) {
   return (
     <div className="rounded-lg border border-border-subtle p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium text-text-strong">
-            {prescription.drug_details.drug}
-          </p>
-          <p className="text-sm text-text-muted">
-            {prescription.drug_details.dosage}
-          </p>
-        </div>
+        <MedicineList details={prescription.drug_details} showDiagnosis />
         <StatusPill status={prescription.status} />
       </div>
-
-      <p className="mt-2 text-sm text-foreground">
-        {prescription.drug_details.instructions}
-      </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Badge variant="secondary" className="tabular">

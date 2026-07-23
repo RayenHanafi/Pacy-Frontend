@@ -153,11 +153,22 @@ export interface ScanResult {
   recently_completed?: Prescription[];
 }
 
-export interface DrugDetails {
+/** One line on the script. A prescription carries at least one, at most 20. */
+export interface Medicine {
   drug: string;
   dosage: string;
   instructions: string;
-  /** Optional: the doctor's own listing omits it. Never render it to a pharmacy. */
+}
+
+/**
+ * One prescription = one token, one expiry, one fill count — but several
+ * medicines. `max_uses` and `expires_at` sit on the prescription, not here.
+ *
+ * Always read `medicines` as a list; there is no single-drug shape any more.
+ */
+export interface DrugDetails {
+  medicines: Medicine[];
+  /** Prescription-level and optional. Never render it to a pharmacy. */
   diagnosis?: string;
 }
 
@@ -232,12 +243,7 @@ export interface DoctorPrescriptionsResponse {
 /** POST /prescriptions (doctor) — request body. */
 export interface CreatePrescriptionBody {
   patient_id: string;
-  drug_details: {
-    drug: string;
-    dosage: string;
-    instructions: string;
-    diagnosis: string;
-  };
+  drug_details: DrugDetails;
   max_uses: number; // int >= 1
   expires_at: Expiry;
   /**

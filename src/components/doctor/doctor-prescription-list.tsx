@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { canRevoke, RevokeButton } from "@/components/doctor/revoke-button";
-import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
+import {
+  EventTrail,
+  MedicineList,
+  StatusPill,
+} from "@/components/shared/prescription-meta";
 import { formatDate, TxHash } from "@/components/shared/tx-hash";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -34,12 +38,8 @@ function DoctorPrescriptionRow({
     <div className="rounded-lg border border-border-subtle p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-medium text-text-strong">
-            {current.drug_details.drug}
-          </p>
-          <p className="text-sm text-text-muted">
-            {patientName} · {current.drug_details.dosage}
-          </p>
+          <p className="mb-1 text-sm text-text-muted">{patientName}</p>
+          <MedicineList details={current.drug_details} showDiagnosis />
         </div>
         <StatusPill status={current.status} />
       </div>

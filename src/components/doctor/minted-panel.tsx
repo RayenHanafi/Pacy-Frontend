@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { canRevoke, RevokeButton } from "@/components/doctor/revoke-button";
+import { MedicineList } from "@/components/shared/prescription-meta";
 import { formatDate, TxHash } from "@/components/shared/tx-hash";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,15 +47,7 @@ export function MintedPanel({
 
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-border-subtle p-4">
-          <p className="font-medium text-text-strong">
-            {current.drug_details.drug}
-          </p>
-          <p className="text-sm text-text-muted">
-            {current.drug_details.dosage}
-          </p>
-          <p className="mt-1 text-sm text-foreground">
-            {current.drug_details.instructions}
-          </p>
+          <MedicineList details={current.drug_details} showDiagnosis />
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="tabular">

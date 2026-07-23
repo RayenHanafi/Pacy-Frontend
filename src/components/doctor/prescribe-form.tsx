@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,20 @@ import { Input } from "@/components/ui/input";
 import { useChainPrescribe } from "@/lib/chain-queries";
 import type { Prescription, ScannedPatient } from "@/lib/types";
 
-const schema = z.object({
+/** Backend limit: at least one medicine, at most 20 on one prescription. */
+const MAX_MEDICINES = 20;
+
+const medicineSchema = z.object({
   drug: z.string().min(1, "Required"),
   dosage: z.string().min(1, "Required"),
   instructions: z.string().min(1, "Required"),
-  diagnosis: z.string().min(1, "Required"),
+});
+
+const schema = z.object({
+  // One prescription, one token, one expiry — but several medicines.
+  medicines: z.array(medicineSchema).min(1).max(MAX_MEDICINES),
+  // Prescription-level and optional; blank is sent as absent, not "".
+  diagnosis: z.string(),
   // Kept as a string: a number input yields a string anyway, and coercing
   // inside the schema makes the field's type `unknown`.
   max_uses: z
@@ -41,6 +50,8 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+const EMPTY_MEDICINE = { drug: "", dosage: "", instructions: "" };
 
 export function PrescribeForm({
   patient,
@@ -59,21 +70,21 @@ export function PrescribeForm({
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      drug: "",
-      dosage: "",
-      instructions: "",
+      medicines: [{ ...EMPTY_MEDICINE }],
       diagnosis: "",
       max_uses: "1",
       expires_at: "",
     },
   });
 
+  const medicines = useFieldArray({ control: form.control, name: "medicines" });
+
   function onSubmit(values: FormValues) {
+    const diagnosis = values.diagnosis.trim();
     const drug_details = {
-      drug: values.drug,
-      dosage: values.dosage,
-      instructions: values.instructions,
-      diagnosis: values.diagnosis,
+      medicines: values.medicines,
+      // Optional and prescription-level: omit rather than send an empty string.
+      ...(diagnosis ? { diagnosis } : {}),
     };
     const max_uses = Number(values.max_uses);
     // Date input gives a local calendar day; the contract wants ISO UTC or
@@ -104,50 +115,89 @@ export function PrescribeForm({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="drug"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Drug</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Amoxicillin 500mg" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* One prescription can carry several medicines. The fills and
+                expiry below apply to all of them together. */}
+            <div className="space-y-4">
+              {medicines.fields.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="space-y-4 rounded-lg border border-border-subtle p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-text-strong">
+                      Medicine {index + 1}
+                    </p>
+                    {medicines.fields.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => medicines.remove(index)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
 
-            <FormField
-              control={form.control}
-              name="dosage"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dosage</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="1 capsule three times daily"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.drug`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Drug</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Amoxicillin 500mg" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <FormField
-              control={form.control}
-              name="instructions"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instructions</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Take with food" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.dosage`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dosage</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1 capsule three times daily"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.instructions`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Instructions</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Take with food" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={medicines.fields.length >= MAX_MEDICINES}
+                onClick={() => medicines.append({ ...EMPTY_MEDICINE })}
+              >
+                {medicines.fields.length >= MAX_MEDICINES
+                  ? `Limit is ${MAX_MEDICINES} medicines`
+                  : "Add another medicine"}
+              </Button>
+            </div>
 
             <FormField
               control={form.control}
@@ -158,6 +208,10 @@ export function PrescribeForm({
                   <FormControl>
                     <Input placeholder="Bacterial throat infection" {...field} />
                   </FormControl>
+                  <FormDescription>
+                    Optional, and covers the whole prescription. Not shown to
+                    the dispensing pharmacy.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -174,7 +228,8 @@ export function PrescribeForm({
                       <Input type="number" min={1} step={1} {...field} />
                     </FormControl>
                     <FormDescription>
-                      Enforced by the ledger, not by us.
+                      For the whole prescription. Enforced by the ledger, not
+                      by us.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

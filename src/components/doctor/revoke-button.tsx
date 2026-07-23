@@ -1,6 +1,7 @@
 "use client";
 
 import { BlockedPanel } from "@/components/shared/blocked-panel";
+import { summariseMedicines } from "@/components/shared/prescription-meta";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +57,8 @@ export function RevokeButton({
             <AlertDialogDescription>
               This burns all {prescription.uses_remaining} remaining fill
               {prescription.uses_remaining === 1 ? "" : "s"} of{" "}
-              {prescription.drug_details.drug} on-chain. It cannot be undone,
+              {summariseMedicines(prescription.drug_details)} on-chain. It
+              cannot be undone,
               and {patientName} will see it marked revoked in their history.
             </AlertDialogDescription>
           </AlertDialogHeader>

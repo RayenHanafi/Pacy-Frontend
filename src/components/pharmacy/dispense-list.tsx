@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
-import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
+import {
+  EventTrail,
+  MedicineList,
+  StatusPill,
+} from "@/components/shared/prescription-meta";
 import { formatDate, TxHash } from "@/components/shared/tx-hash";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,14 +66,9 @@ function PrescriptionRow({
       }`}
     >
       <div className="flex flex-wrap items-start gap-3">
+        {/* No diagnosis here — a dispensing pharmacy has no need for it. */}
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-text-strong">
-            {current.drug_details.drug}
-          </p>
-          <p className="text-sm text-text-muted">{current.drug_details.dosage}</p>
-          <p className="mt-1 text-sm text-foreground">
-            {current.drug_details.instructions}
-          </p>
+          <MedicineList details={current.drug_details} />
         </div>
 
         <div className="text-right">
