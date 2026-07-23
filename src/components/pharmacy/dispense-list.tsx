@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
-import { EventTrail, StatusPill } from "@/components/shared/prescription-meta";
+import {
+  EventTrail,
+  MedicineList,
+  StatusPill,
+} from "@/components/shared/prescription-meta";
 import { formatDate, TxHash } from "@/components/shared/tx-hash";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useDispense } from "@/lib/queries";
+import { useChainDispense } from "@/lib/chain-queries";
 import type { Prescription } from "@/lib/types";
 
 /**
@@ -36,12 +40,14 @@ function PrescriptionRow({
   prescription,
   patientName,
   variant,
+  pharmacyUserId,
 }: {
   prescription: Prescription;
   patientName: string;
   variant: RowVariant;
+  pharmacyUserId: string;
 }) {
-  const dispense = useDispense();
+  const dispense = useChainDispense(pharmacyUserId);
   const [justDispensed, setJustDispensed] = useState<Prescription | null>(null);
   // When we saw the burn submitted — the explorer needs ~20s before it can
   // resolve the hash, so the link stays inert until then.
@@ -60,14 +66,9 @@ function PrescriptionRow({
       }`}
     >
       <div className="flex flex-wrap items-start gap-3">
+        {/* No diagnosis here — a dispensing pharmacy has no need for it. */}
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-text-strong">
-            {current.drug_details.drug}
-          </p>
-          <p className="text-sm text-text-muted">{current.drug_details.dosage}</p>
-          <p className="mt-1 text-sm text-foreground">
-            {current.drug_details.instructions}
-          </p>
+          <MedicineList details={current.drug_details} />
         </div>
 
         <div className="text-right">
@@ -172,10 +173,12 @@ export function DispenseList({
   prescriptions,
   recentlyCompleted,
   patientName,
+  pharmacyUserId,
 }: {
   prescriptions: Prescription[];
   recentlyCompleted: Prescription[];
   patientName: string;
+  pharmacyUserId: string;
 }) {
   return (
     <div className="space-y-4">
@@ -201,6 +204,7 @@ export function DispenseList({
                 prescription={p}
                 patientName={patientName}
                 variant="dispensable"
+                pharmacyUserId={pharmacyUserId}
               />
             ))
           )}
@@ -227,6 +231,7 @@ export function DispenseList({
                 prescription={p}
                 patientName={patientName}
                 variant="completed"
+                pharmacyUserId={pharmacyUserId}
               />
             ))}
           </CardContent>

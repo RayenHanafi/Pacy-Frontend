@@ -1,8 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
 import { Button } from "@/components/ui/button";
@@ -23,15 +22,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useCreatePrescription } from "@/lib/queries";
-import { signPayload } from "@/lib/signing";
+import { useChainPrescribe } from "@/lib/chain-queries";
 import type { Prescription, ScannedPatient } from "@/lib/types";
 
-const schema = z.object({
+/** Backend limit: at least one medicine, at most 20 on one prescription. */
+const MAX_MEDICINES = 20;
+
+const medicineSchema = z.object({
   drug: z.string().min(1, "Required"),
   dosage: z.string().min(1, "Required"),
   instructions: z.string().min(1, "Required"),
-  diagnosis: z.string().min(1, "Required"),
+});
+
+const schema = z.object({
+  // One prescription, one token, one expiry — but several medicines.
+  medicines: z.array(medicineSchema).min(1).max(MAX_MEDICINES),
+  // Prescription-level and optional; blank is sent as absent, not "".
+  diagnosis: z.string(),
   // Kept as a string: a number input yields a string anyway, and coercing
   // inside the schema makes the field's type `unknown`.
   max_uses: z
@@ -44,73 +51,51 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+const EMPTY_MEDICINE = { drug: "", dosage: "", instructions: "" };
+
 export function PrescribeForm({
   patient,
   doctorUserId,
   onMinted,
 }: {
   patient: ScannedPatient;
-  /** The doctor's own user id — part of the signed payload, not the body. */
+  /** The doctor's user id — whose wallet signs the mint. */
   doctorUserId: string;
   onMinted: (prescription: Prescription) => void;
 }) {
-  const mutation = useCreatePrescription();
-  const [signingError, setSigningError] = useState<string | null>(null);
+  // Path A: prepare → sign with the doctor's key → commit, all inside the
+  // mutation. Signing failures throw and surface through the same panel.
+  const mutation = useChainPrescribe(doctorUserId);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      drug: "",
-      dosage: "",
-      instructions: "",
+      medicines: [{ ...EMPTY_MEDICINE }],
       diagnosis: "",
       max_uses: "1",
       expires_at: "",
     },
   });
 
-  async function onSubmit(values: FormValues) {
-    setSigningError(null);
+  const medicines = useFieldArray({ control: form.control, name: "medicines" });
 
+  function onSubmit(values: FormValues) {
+    const diagnosis = values.diagnosis.trim();
     const drug_details = {
-      drug: values.drug,
-      dosage: values.dosage,
-      instructions: values.instructions,
-      diagnosis: values.diagnosis,
+      medicines: values.medicines,
+      // Optional and prescription-level: omit rather than send an empty string.
+      ...(diagnosis ? { diagnosis } : {}),
     };
     const max_uses = Number(values.max_uses);
     // Date input gives a local calendar day; the contract wants ISO UTC or
     // null. End-of-day avoids a prescription expiring the morning the doctor
-    // picked. Computed once: the signature covers this exact string, so
-    // deriving it twice risks signing one value and sending another.
+    // picked.
     const expires_at = values.expires_at
       ? new Date(`${values.expires_at}T23:59:59Z`).toISOString()
       : null;
 
-    let doctor_signature: string;
-    try {
-      doctor_signature = await signPayload(doctorUserId, {
-        patient_id: patient.id,
-        // Not in the request body — the backend reads it from the JWT — but
-        // it IS in the signed payload.
-        doctor_id: doctorUserId,
-        drug_details,
-        max_uses,
-        expires_at,
-      });
-    } catch (error) {
-      // Fail closed: a prescription that can't be signed must not be written,
-      // and must not be sent unsigned for the server to reject.
-      setSigningError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't sign this prescription on this device.",
-      );
-      return;
-    }
-
     mutation.mutate(
-      { patient_id: patient.id, drug_details, max_uses, expires_at, doctor_signature },
+      { patient_id: patient.id, drug_details, max_uses, expires_at },
       { onSuccess: (result) => result && onMinted(result) },
     );
   }
@@ -122,58 +107,97 @@ export function PrescribeForm({
           New prescription
         </CardTitle>
         <CardDescription>
-          This mints a token for {patient.full_name}. The fill count is enforced
-          on-chain.
+          This mints a token for {patient.full_name}, signed with your key —
+          nobody can issue it in your name.
         </CardDescription>
       </CardHeader>
 
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="drug"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Drug</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Amoxicillin 500mg" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* One prescription can carry several medicines. The fills and
+                expiry below apply to all of them together. */}
+            <div className="space-y-4">
+              {medicines.fields.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="space-y-4 rounded-lg border border-border-subtle p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-text-strong">
+                      Medicine {index + 1}
+                    </p>
+                    {medicines.fields.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => medicines.remove(index)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
 
-            <FormField
-              control={form.control}
-              name="dosage"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dosage</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="1 capsule three times daily"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.drug`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Drug</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Amoxicillin 500mg" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <FormField
-              control={form.control}
-              name="instructions"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instructions</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Take with food" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.dosage`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dosage</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1 capsule three times daily"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name={`medicines.${index}.instructions`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Instructions</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Take with food" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={medicines.fields.length >= MAX_MEDICINES}
+                onClick={() => medicines.append({ ...EMPTY_MEDICINE })}
+              >
+                {medicines.fields.length >= MAX_MEDICINES
+                  ? `Limit is ${MAX_MEDICINES} medicines`
+                  : "Add another medicine"}
+              </Button>
+            </div>
 
             <FormField
               control={form.control}
@@ -184,6 +208,10 @@ export function PrescribeForm({
                   <FormControl>
                     <Input placeholder="Bacterial throat infection" {...field} />
                   </FormControl>
+                  <FormDescription>
+                    Optional, and covers the whole prescription. Not shown to
+                    the dispensing pharmacy.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -200,7 +228,8 @@ export function PrescribeForm({
                       <Input type="number" min={1} step={1} {...field} />
                     </FormControl>
                     <FormDescription>
-                      Enforced by the ledger, not by us.
+                      For the whole prescription. Enforced by the ledger, not
+                      by us.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -222,18 +251,6 @@ export function PrescribeForm({
                 )}
               />
             </div>
-
-            {signingError ? (
-              <div className="rounded-lg border border-danger/40 bg-danger-surface p-4">
-                <p className="font-medium text-danger-text">
-                  Couldn&rsquo;t sign this prescription
-                </p>
-                <p className="text-sm text-foreground">{signingError}</p>
-                <p className="pt-1 text-sm text-text-muted">
-                  Nothing was written — no token was minted.
-                </p>
-              </div>
-            ) : null}
 
             {mutation.isError ? (
               <BlockedPanel

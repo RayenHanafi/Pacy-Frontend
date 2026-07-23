@@ -1,7 +1,96 @@
 "use client";
 
 import { TxHash } from "@/components/shared/tx-hash";
-import type { PrescriptionEvent, PrescriptionStatus } from "@/lib/types";
+import type {
+  DrugDetails,
+  Medicine,
+  PrescriptionEvent,
+  PrescriptionStatus,
+} from "@/lib/types";
+
+/**
+ * A prescription's medicines, tolerant of a row written before `drug_details`
+ * became `{ medicines: [...] }`. Seeded demo data may still hold the old flat
+ * shape, and a `.map` on `undefined` would blank the whole screen — so read
+ * defensively here, once, rather than guarding at five call sites.
+ */
+export function medicinesOf(details: DrugDetails): Medicine[] {
+  if (Array.isArray(details?.medicines)) return details.medicines;
+  const legacy = details as unknown as Partial<Medicine>;
+  if (typeof legacy?.drug === "string") {
+    return [
+      {
+        drug: legacy.drug,
+        dosage: legacy.dosage ?? "",
+        instructions: legacy.instructions ?? "",
+      },
+    ];
+  }
+  return [];
+}
+
+/** "Metformin 500mg" / "Metformin 500mg and 2 others" — for one-line copy. */
+export function summariseMedicines(details: DrugDetails): string {
+  const medicines = medicinesOf(details);
+  if (medicines.length === 0) return "this prescription";
+  const [first, ...rest] = medicines;
+  if (rest.length === 0) return first.drug;
+  return `${first.drug} and ${rest.length} other${rest.length === 1 ? "" : "s"}`;
+}
+
+/**
+ * The medicines on a script. Always a list, even at one entry — a pharmacist
+ * reading only the first line of a two-drug prescription is the failure this
+ * shape exists to prevent, so multiples are visually separated, not run together.
+ *
+ * `showDiagnosis` is off by default: the diagnosis is the doctor's and the
+ * patient's, never the dispensing pharmacy's.
+ */
+export function MedicineList({
+  details,
+  showDiagnosis = false,
+}: {
+  details: DrugDetails;
+  showDiagnosis?: boolean;
+}) {
+  const medicines = medicinesOf(details);
+  const many = medicines.length > 1;
+
+  return (
+    <div className="min-w-0">
+      {many ? (
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+          {medicines.length} medicines
+        </p>
+      ) : null}
+
+      <ul className={many ? "space-y-3" : undefined}>
+        {medicines.map((medicine, index) => (
+          <li
+            key={`${medicine.drug}-${index}`}
+            className={many ? "border-l-2 border-brand/30 pl-3" : undefined}
+          >
+            <p className="font-medium text-text-strong">{medicine.drug}</p>
+            {medicine.dosage ? (
+              <p className="text-sm text-text-muted">{medicine.dosage}</p>
+            ) : null}
+            {medicine.instructions ? (
+              <p className="mt-0.5 text-sm text-foreground">
+                {medicine.instructions}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      {showDiagnosis && details.diagnosis ? (
+        <p className="mt-2 text-sm text-text-muted">
+          Diagnosis: {details.diagnosis}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * Status styling. Revoked and expired prescriptions stay visible on purpose —
