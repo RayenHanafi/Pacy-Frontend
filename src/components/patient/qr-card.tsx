@@ -33,6 +33,18 @@ function secondsLeft(expiresAt: string): number {
 export function QrCard() {
   const { data, isPending, isError, error, refetch, isFetching } = useQrToken();
   const [remaining, setRemaining] = useState(WINDOW_SECONDS);
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    if (!data?.token) return;
+    try {
+      await navigator.clipboard.writeText(data.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be blocked; the QR is still the primary path.
+    }
+  }
 
   const expiresAt = data?.expires_at;
 
@@ -83,16 +95,23 @@ export function QrCard() {
           <>
             <div className="relative flex items-center justify-center rounded-lg border border-border-subtle bg-white p-6">
               {/* White quiet zone and high contrast — scanners are the
-                  audience here, not people. */}
+                  audience here, not people.
+
+                  Level "L", not "M": the token is a ~250-char JWT, which at
+                  "M" produces a very dense QR whose tiny modules a fixed-focus
+                  laptop webcam can't resolve off a phone screen. "L" needs a
+                  lower version (bigger modules) and the extra error correction
+                  buys nothing for a clean on-screen render. Rendered large for
+                  the same reason — bigger modules scan from further away. */}
               <QRCodeSVG
                 value={data.token}
-                size={240}
-                level="M"
+                size={320}
+                level="L"
                 bgColor="#ffffff"
                 // Near-black, not brand teal: scanners want maximum contrast,
                 // and a colored QR is the classic way to make one unreadable.
                 fgColor="#10201f"
-                className="h-auto w-full max-w-[240px]"
+                className="h-auto w-full max-w-[320px]"
               />
 
               {expired ? (
@@ -121,10 +140,24 @@ export function QrCard() {
               </span>
             </div>
 
-            <p className="text-xs text-text-muted">
-              A screenshot of this code won&rsquo;t work — it expires in 30
-              seconds.
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-text-muted">
+                A screenshot of this code won&rsquo;t work — it expires in 30
+                seconds.
+              </p>
+              {/* Fallback for when the camera can't read the QR — the copied
+                  code goes through the same scan endpoint and expires just as
+                  fast, so it's no weaker than showing the QR. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-xs"
+                onClick={copyCode}
+                disabled={expired}
+              >
+                {copied ? "Copied" : "Copy code"}
+              </Button>
+            </div>
 
             {isFetching ? (
               <span className="sr-only" role="status">

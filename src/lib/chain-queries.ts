@@ -65,7 +65,14 @@ export function useEnrolChainWallet(userId: string | undefined) {
   return useMutation({
     mutationFn: async () => {
       if (!userId) throw new Error("No user id.");
-      const identity = await generateChainWallet(userId);
+      // Promote the existing device key if there is one; only generate a fresh
+      // key when the device holds none. The backend treats the latest-enrolled
+      // key as the one it will require on a mint/burn, so re-enrolling this
+      // device's stored key makes it current again — without stranding a key
+      // that may have signed history. Regenerating here would rotate needlessly
+      // and is what the "reconstruct, don't regenerate" guidance warns against.
+      const existing = await getLocalChainIdentity(userId);
+      const identity = existing ?? (await generateChainWallet(userId));
       return api<ChainWalletEnrolment>("/chain/wallet", {
         method: "POST",
         json: { address: identity.address, key_hash: identity.keyHash },

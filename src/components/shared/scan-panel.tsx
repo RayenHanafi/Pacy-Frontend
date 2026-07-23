@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { useCurrentScan, useScanQrToken } from "@/lib/queries";
 import type { ScanResult } from "@/lib/types";
@@ -32,6 +33,7 @@ export function ScanPanel({
 }) {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState("");
 
   const scanMutation = useScanQrToken();
 
@@ -86,6 +88,7 @@ export function ScanPanel({
                       : "Couldn't open the camera.",
                   )
                 }
+                formats={["qr_code"]}
                 constraints={{ facingMode: "environment" }}
                 sound={false}
               />
@@ -145,6 +148,44 @@ export function ScanPanel({
             >
               Scan with this device&rsquo;s camera
             </Button>
+
+            {/* Fallback when the camera can't read the QR — the same code the
+                QR encodes, run through the same /scan endpoint. The patient's
+                "Copy code" button provides it; it expires in 30s either way. */}
+            <form
+              className="flex gap-2 pt-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const code = manualCode.trim();
+                if (code) handleDecode(code);
+              }}
+            >
+              <Input
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder="Or paste the patient's code"
+                aria-label="Patient code"
+              />
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={!manualCode.trim() || scanMutation.isPending}
+              >
+                Go
+              </Button>
+            </form>
+
+            {!cameraOpen && scanError ? (
+              <Alert variant={staleQr ? "default" : "destructive"}>
+                <AlertDescription>
+                  {staleQr
+                    ? "That code had already expired. Ask the patient for the current one."
+                    : scanError instanceof Error
+                      ? scanError.message
+                      : "That code didn't work."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </>
         )}
       </CardContent>

@@ -29,9 +29,15 @@ const VERB: Record<"doctor" | "pharmacy", string> = {
 export function ChainWalletPanel({
   userId,
   role,
+  reactivate = false,
 }: {
   userId: string;
   role: Role;
+  /**
+   * The device already holds a key, but it isn't the one the backend currently
+   * requires. Re-enrol to make it current — same key, no new one generated.
+   */
+  reactivate?: boolean;
 }) {
   const enrol = useEnrolChainWallet(userId);
   const available = isChainWalletAvailable();
@@ -41,24 +47,36 @@ export function ChainWalletPanel({
     <Card>
       <CardHeader>
         <CardTitle className="font-display text-text-strong">
-          Set up your signing key
+          {reactivate
+            ? "Reactivate signing on this device"
+            : "Set up your signing key"}
         </CardTitle>
         <CardDescription>
-          Pacy creates a Cardano key on this device so you can {verb}. Nobody,
-          including Pacy, can act in your name without it.
+          {reactivate
+            ? `Signing was set up somewhere more recently, so this device isn't active. Reactivate it to ${verb} from here.`
+            : `Pacy creates a Cardano key on this device so you can ${verb}. Nobody, including Pacy, can act in your name without it.`}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-brand/40 bg-brand-surface p-4 text-sm text-foreground">
-          <p>
-            The key stays on this device. It needs no funds — you only sign;
-            Pacy pays the network fees.
-          </p>
-          <p className="mt-2 text-text-muted">
-            If you change devices you&rsquo;ll set up a new one. Anything
-            you&rsquo;ve already signed stays valid.
-          </p>
+          {reactivate ? (
+            <p>
+              This uses the key already on this device — nothing new is created,
+              and anything you&rsquo;ve already signed stays valid.
+            </p>
+          ) : (
+            <>
+              <p>
+                The key stays on this device. It needs no funds — you only sign;
+                Pacy pays the network fees.
+              </p>
+              <p className="mt-2 text-text-muted">
+                If you change devices you&rsquo;ll set up a new one. Anything
+                you&rsquo;ve already signed stays valid.
+              </p>
+            </>
+          )}
         </div>
 
         {!available ? (
@@ -96,19 +114,35 @@ export function ChainWalletPanel({
           onClick={() => enrol.mutate()}
           disabled={enrol.isPending || !available}
         >
-          {enrol.isPending ? "Setting up…" : "Create signing key"}
+          {enrol.isPending
+            ? "Setting up…"
+            : reactivate
+              ? "Reactivate signing key"
+              : "Create signing key"}
         </Button>
       </CardContent>
     </Card>
   );
 }
 
-/** The reassurance line once enrolled — short key-hash tail, human-comparable. */
-export function ChainWalletBadge({ keyHash }: { keyHash: string }) {
+/**
+ * Reassurance that this device can sign — no key hash. The raw hash reads as a
+ * debug leak on a clinical screen; the operator only needs to know signing is
+ * active, not the fingerprint.
+ */
+export function ChainWalletBadge() {
   return (
-    <p className="text-xs text-text-muted">
-      Signing key{" "}
-      <code className="font-mono text-text-default">····{keyHash.slice(-16)}</code>
-    </p>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-surface px-2.5 py-1 text-xs font-medium text-success-text">
+      <svg viewBox="0 0 16 16" className="size-3.5" fill="none" aria-hidden>
+        <path
+          d="M13 4.5 6.5 11 3 7.5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      Signing enabled
+    </span>
   );
 }

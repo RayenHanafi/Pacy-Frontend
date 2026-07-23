@@ -48,17 +48,24 @@ export default function PharmacyHome() {
     );
   }
 
-  // Blocking: a pharmacy can't dispense without an enrolled key. Set it up
-  // before the scanner so it doesn't interrupt a patient interaction.
-  if (gate.state === "enrol") {
-    return <ChainWalletPanel userId={me.id} role="pharmacy" />;
+  // Blocking: a pharmacy can't dispense without an enrolled key that matches
+  // the backend's current one. Set it up before the scanner so it doesn't
+  // interrupt a patient interaction.
+  if (gate.state === "enrol" || gate.state === "reactivate") {
+    return (
+      <ChainWalletPanel
+        userId={me.id}
+        role="pharmacy"
+        reactivate={gate.state === "reactivate"}
+      />
+    );
   }
 
   if (!scan) {
     return (
       <div className="space-y-4">
         <ScanPanel onScanned={onScanned} />
-        <ChainWalletBadge keyHash={gate.keyHash} />
+        <ChainWalletBadge />
       </div>
     );
   }

@@ -57,11 +57,17 @@ export default function DoctorHome() {
     );
   }
 
-  // Blocking: a doctor cannot prescribe without an enrolled key. Shown before
-  // the scanner so the setup happens once, up front, rather than stranding
-  // them with a patient already in the room.
-  if (gate.state === "enrol") {
-    return <ChainWalletPanel userId={me.id} role="doctor" />;
+  // Blocking: a doctor cannot prescribe without an enrolled key that matches
+  // the backend's current one. Shown before the scanner so setup happens once,
+  // up front, rather than stranding them with a patient already in the room.
+  if (gate.state === "enrol" || gate.state === "reactivate") {
+    return (
+      <ChainWalletPanel
+        userId={me.id}
+        role="doctor"
+        reactivate={gate.state === "reactivate"}
+      />
+    );
   }
 
   // No patient in hand: scan for one, and meanwhile show what this doctor has
@@ -70,7 +76,7 @@ export default function DoctorHome() {
     return (
       <div className="space-y-4">
         <ScanPanel onScanned={onScanned} />
-        <ChainWalletBadge keyHash={gate.keyHash} />
+        <ChainWalletBadge />
         <DoctorPrescriptionList />
       </div>
     );
