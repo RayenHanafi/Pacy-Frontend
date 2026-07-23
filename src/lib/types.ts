@@ -70,7 +70,12 @@ export type ApiErrorCode =
   | "DOCTOR_KEY_NOT_ENROLLED"
   // 422 — signature didn't verify. Never retry silently: a prescription that
   // fails to sign must not be written.
-  | "INVALID_DOCTOR_SIGNATURE";
+  | "INVALID_DOCTOR_SIGNATURE"
+  // --- Path A (decentralized chain wallet) ---
+  // 409 — user has no on-chain wallet enrolled. Route to enrolment, then retry.
+  | "CHAIN_WALLET_NOT_ENROLLED"
+  // 503 — settings UTxO not deployed yet. Transient at first boot; retry.
+  | "CHAIN_NOT_INITIALISED";
 
 /**
  * The four codes that mean "the chain refused this dispense." These are the
@@ -259,4 +264,40 @@ export interface SigningKeyEnrolment {
   enrolled_at: IsoDateTime;
   /** True when this replaced an existing active key (new or lost device). */
   replaced_previous: boolean;
+}
+
+/* ------------------------------------------------------------- Path A ------
+ * Decentralized chain-wallet flow. Doctor and pharmacy each hold a Cardano
+ * key in the browser; the backend builds unsigned txs they co-sign.
+ */
+
+/** GET /chain/wallet. `enrolled: false` is the whole body when not enrolled. */
+export interface ChainWalletStatus {
+  enrolled: boolean;
+  address?: string;
+  key_hash?: string;
+  role?: Role;
+}
+
+/** POST /chain/wallet — request. */
+export interface ChainWalletEnrolmentBody {
+  address: string;
+  key_hash: string;
+}
+
+/** POST /chain/wallet — 201. */
+export interface ChainWalletEnrolment {
+  enrolled: boolean;
+  role: Role;
+  key_hash: string;
+  /** False when the key was already on the allow-list (idempotent re-enrol). */
+  added: boolean;
+  /** The admin settings-update tx that added the key on-chain. */
+  settings_tx: string;
+}
+
+/** POST /prescriptions/prepare and /:id/dispense/prepare — 200/201. */
+export interface PrepareTxResponse {
+  prescription_id: string;
+  unsigned_tx: string;
 }
