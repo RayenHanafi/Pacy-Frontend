@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BlockedPanel } from "@/components/shared/blocked-panel";
@@ -23,8 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useCreatePrescription } from "@/lib/queries";
-import { signPayload } from "@/lib/signing";
+import { useChainPrescribe } from "@/lib/chain-queries";
 import type { Prescription, ScannedPatient } from "@/lib/types";
 
 const schema = z.object({
@@ -50,12 +48,13 @@ export function PrescribeForm({
   onMinted,
 }: {
   patient: ScannedPatient;
-  /** The doctor's own user id — part of the signed payload, not the body. */
+  /** The doctor's user id — whose wallet signs the mint. */
   doctorUserId: string;
   onMinted: (prescription: Prescription) => void;
 }) {
-  const mutation = useCreatePrescription();
-  const [signingError, setSigningError] = useState<string | null>(null);
+  // Path A: prepare → sign with the doctor's key → commit, all inside the
+  // mutation. Signing failures throw and surface through the same panel.
+  const mutation = useChainPrescribe(doctorUserId);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -69,9 +68,7 @@ export function PrescribeForm({
     },
   });
 
-  async function onSubmit(values: FormValues) {
-    setSigningError(null);
-
+  function onSubmit(values: FormValues) {
     const drug_details = {
       drug: values.drug,
       dosage: values.dosage,
@@ -81,36 +78,13 @@ export function PrescribeForm({
     const max_uses = Number(values.max_uses);
     // Date input gives a local calendar day; the contract wants ISO UTC or
     // null. End-of-day avoids a prescription expiring the morning the doctor
-    // picked. Computed once: the signature covers this exact string, so
-    // deriving it twice risks signing one value and sending another.
+    // picked.
     const expires_at = values.expires_at
       ? new Date(`${values.expires_at}T23:59:59Z`).toISOString()
       : null;
 
-    let doctor_signature: string;
-    try {
-      doctor_signature = await signPayload(doctorUserId, {
-        patient_id: patient.id,
-        // Not in the request body — the backend reads it from the JWT — but
-        // it IS in the signed payload.
-        doctor_id: doctorUserId,
-        drug_details,
-        max_uses,
-        expires_at,
-      });
-    } catch (error) {
-      // Fail closed: a prescription that can't be signed must not be written,
-      // and must not be sent unsigned for the server to reject.
-      setSigningError(
-        error instanceof Error
-          ? error.message
-          : "Couldn't sign this prescription on this device.",
-      );
-      return;
-    }
-
     mutation.mutate(
-      { patient_id: patient.id, drug_details, max_uses, expires_at, doctor_signature },
+      { patient_id: patient.id, drug_details, max_uses, expires_at },
       { onSuccess: (result) => result && onMinted(result) },
     );
   }
@@ -122,8 +96,8 @@ export function PrescribeForm({
           New prescription
         </CardTitle>
         <CardDescription>
-          This mints a token for {patient.full_name}. The fill count is enforced
-          on-chain.
+          This mints a token for {patient.full_name}, signed with your key —
+          nobody can issue it in your name.
         </CardDescription>
       </CardHeader>
 
@@ -222,18 +196,6 @@ export function PrescribeForm({
                 )}
               />
             </div>
-
-            {signingError ? (
-              <div className="rounded-lg border border-danger/40 bg-danger-surface p-4">
-                <p className="font-medium text-danger-text">
-                  Couldn&rsquo;t sign this prescription
-                </p>
-                <p className="text-sm text-foreground">{signingError}</p>
-                <p className="pt-1 text-sm text-text-muted">
-                  Nothing was written — no token was minted.
-                </p>
-              </div>
-            ) : null}
 
             {mutation.isError ? (
               <BlockedPanel

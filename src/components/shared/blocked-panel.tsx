@@ -48,6 +48,16 @@ const BLOCKED_COPY: Partial<
     title: "Signature didn't verify",
     body: "This device's signing key doesn't match the one on record — it's usually because signing was set up on another device since. Set up signing again here. Nothing was written.",
   },
+  CHAIN_WALLET_NOT_ENROLLED: {
+    title: "Signing key not set up",
+    body: "Your signing key isn't enrolled on-chain yet. Set it up, then try again — nothing was written.",
+  },
+  CHAIN_NOT_INITIALISED: {
+    // 503 — the on-chain settings aren't deployed yet. Transient at first boot.
+    title: "Chain still starting up",
+    body: "The on-chain setup isn't ready yet. Give it a moment and try again.",
+    retryable: true,
+  },
   FORBIDDEN: {
     title: "Not permitted",
     body: "This account can't perform that action.",

@@ -5,22 +5,23 @@ import { DoctorPrescriptionList } from "@/components/doctor/doctor-prescription-
 import { MintedPanel } from "@/components/doctor/minted-panel";
 import { PrescribeForm } from "@/components/doctor/prescribe-form";
 import {
-  SigningKeyBadge,
-  SigningKeyPanel,
-} from "@/components/doctor/signing-key-panel";
+  ChainWalletBadge,
+  ChainWalletPanel,
+} from "@/components/shared/chain-wallet-panel";
 import { PatientContextBar } from "@/components/shared/patient-context-bar";
 import { ScanPanel } from "@/components/shared/scan-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys, useMe } from "@/lib/queries";
-import { useSigningGate } from "@/lib/use-signing-gate";
+import { useChainWalletGate } from "@/lib/use-chain-wallet-gate";
 import type { Prescription, ScanResult } from "@/lib/types";
 
 export default function DoctorHome() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
-  const gate = useSigningGate();
+  // Path A: the doctor signs mints with their own on-chain key.
+  const gate = useChainWalletGate();
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [minted, setMinted] = useState<Prescription | null>(null);
   const onScanned = useCallback((result: ScanResult) => setScan(result), []);
@@ -56,16 +57,11 @@ export default function DoctorHome() {
     );
   }
 
-  // Blocking: a doctor cannot prescribe without a key. Shown before the
-  // scanner so the setup happens once, up front, rather than stranding them
-  // with a patient already in the room.
-  if (gate.state === "enrol" || gate.state === "reenrol") {
-    return (
-      <SigningKeyPanel
-        doctorUserId={me.id}
-        replacing={gate.state === "reenrol"}
-      />
-    );
+  // Blocking: a doctor cannot prescribe without an enrolled key. Shown before
+  // the scanner so the setup happens once, up front, rather than stranding
+  // them with a patient already in the room.
+  if (gate.state === "enrol") {
+    return <ChainWalletPanel userId={me.id} role="doctor" />;
   }
 
   // No patient in hand: scan for one, and meanwhile show what this doctor has
@@ -74,9 +70,7 @@ export default function DoctorHome() {
     return (
       <div className="space-y-4">
         <ScanPanel onScanned={onScanned} />
-        {gate.state === "ready" ? (
-          <SigningKeyBadge fingerprint={gate.fingerprint} />
-        ) : null}
+        <ChainWalletBadge keyHash={gate.keyHash} />
         <DoctorPrescriptionList />
       </div>
     );

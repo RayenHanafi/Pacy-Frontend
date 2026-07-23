@@ -5,11 +5,22 @@ import { api, CHAIN_TIMEOUT_MS } from "./api";
 import {
   generateChainWallet,
   getLocalChainIdentity,
+  signTransaction,
 } from "./chain-wallet";
+import { queryKeys } from "./queries";
 import type {
   ChainWalletEnrolment,
   ChainWalletStatus,
+  CreatePrescriptionBody,
+  PrepareTxResponse,
+  Prescription,
 } from "./types";
+
+/** Prepare body — the same fields as the custodial mint, minus the signature. */
+export type PreparePrescriptionInput = Omit<
+  CreatePrescriptionBody,
+  "doctor_signature"
+>;
 
 /**
  * Path A query keys. Namespaced under "chain" so nothing here collides with
@@ -66,6 +77,94 @@ export function useEnrolChainWallet(userId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: chainKeys.wallet });
       queryClient.invalidateQueries({
         queryKey: chainKeys.localWallet(userId ?? ""),
+      });
+    },
+  });
+}
+
+/**
+ * Doctor prescribe, Path A: prepare → sign → commit.
+ *
+ * The backend builds the unsigned mint, this wallet adds the doctor's witness,
+ * and the backend co-signs and submits. Signing is local and instant; the two
+ * network legs are the slow part, so this is bounded by CHAIN_TIMEOUT_MS and
+ * never auto-retried — a retry would re-run prepare and could double-mint the
+ * abandoned first record. On a chain error the user re-submits, which re-runs
+ * prepare cleanly (the handoff's "re-prepare and retry" done by hand).
+ */
+export function useChainPrescribe(userId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: PreparePrescriptionInput) => {
+      if (!userId) throw new Error("No user id.");
+      const prepared = await api<PrepareTxResponse>("/prescriptions/prepare", {
+        method: "POST",
+        json: input,
+        timeoutMs: CHAIN_TIMEOUT_MS,
+      });
+      if (!prepared) throw new Error("Prepare returned no transaction.");
+
+      const signedTx = await signTransaction(userId, prepared.unsigned_tx);
+
+      const result = await api<Prescription>("/prescriptions/commit", {
+        method: "POST",
+        json: {
+          prescription_id: prepared.prescription_id,
+          signed_tx: signedTx,
+        },
+        timeoutMs: CHAIN_TIMEOUT_MS,
+      });
+      if (!result) throw new Error("Commit returned no prescription.");
+      return result;
+    },
+    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.patientPrescriptions,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.doctorPrescriptions,
+      });
+    },
+  });
+}
+
+/**
+ * Pharmacy dispense, Path A: prepare → sign → commit.
+ *
+ * Same two-step shape as prescribe. `retry: false` is load-bearing: a burn
+ * spends a fill, and an auto-retry on a slow commit could burn a second one
+ * the patient never received.
+ */
+export function useChainDispense(userId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (prescriptionId: string) => {
+      if (!userId) throw new Error("No user id.");
+      const prepared = await api<PrepareTxResponse>(
+        `/prescriptions/${prescriptionId}/dispense/prepare`,
+        { method: "POST", timeoutMs: CHAIN_TIMEOUT_MS },
+      );
+      if (!prepared) throw new Error("Prepare returned no transaction.");
+
+      const signedTx = await signTransaction(userId, prepared.unsigned_tx);
+
+      const result = await api<Prescription>(
+        `/prescriptions/${prescriptionId}/dispense/commit`,
+        {
+          method: "POST",
+          json: { signed_tx: signedTx },
+          timeoutMs: CHAIN_TIMEOUT_MS,
+        },
+      );
+      if (!result) throw new Error("Commit returned no prescription.");
+      return result;
+    },
+    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.currentScan });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.patientPrescriptions,
       });
     },
   });

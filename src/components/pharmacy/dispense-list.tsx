@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useDispense } from "@/lib/queries";
+import { useChainDispense } from "@/lib/chain-queries";
 import type { Prescription } from "@/lib/types";
 
 /**
@@ -36,12 +36,14 @@ function PrescriptionRow({
   prescription,
   patientName,
   variant,
+  pharmacyUserId,
 }: {
   prescription: Prescription;
   patientName: string;
   variant: RowVariant;
+  pharmacyUserId: string;
 }) {
-  const dispense = useDispense();
+  const dispense = useChainDispense(pharmacyUserId);
   const [justDispensed, setJustDispensed] = useState<Prescription | null>(null);
   // When we saw the burn submitted — the explorer needs ~20s before it can
   // resolve the hash, so the link stays inert until then.
@@ -172,10 +174,12 @@ export function DispenseList({
   prescriptions,
   recentlyCompleted,
   patientName,
+  pharmacyUserId,
 }: {
   prescriptions: Prescription[];
   recentlyCompleted: Prescription[];
   patientName: string;
+  pharmacyUserId: string;
 }) {
   return (
     <div className="space-y-4">
@@ -201,6 +205,7 @@ export function DispenseList({
                 prescription={p}
                 patientName={patientName}
                 variant="dispensable"
+                pharmacyUserId={pharmacyUserId}
               />
             ))
           )}
@@ -227,6 +232,7 @@ export function DispenseList({
                 prescription={p}
                 patientName={patientName}
                 variant="completed"
+                pharmacyUserId={pharmacyUserId}
               />
             ))}
           </CardContent>
